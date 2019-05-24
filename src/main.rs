@@ -1,6 +1,6 @@
+use crate::AnsiTextFormatting::*;
 use std::io::{self, BufRead};
 use termcolor::{/*Color,*/ ColorChoice, ColorSpec, StandardStream, WriteColor};
-use crate::AnsiTextFormatting::*;
 
 fn main() -> io::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -8,6 +8,18 @@ fn main() -> io::Result<()> {
     let stdin = io::stdin();
     let mut handle = stdin.lock();
 
+    // echo everything before the first diff hunk
+    loop {
+        handle.read_until(b'\n', &mut buffer)?;
+        if buffer.is_empty() || starts_hunk(&buffer) {
+            break;
+        }
+        // dbg!(&String::from_utf8_lossy(&buffer));
+        print!("{}", String::from_utf8_lossy(&buffer));
+        buffer.clear();
+    }
+
+    // process hunks
     loop {
         handle.read_until(b'\n', &mut buffer)?;
         if buffer.is_empty() {
@@ -22,6 +34,12 @@ fn main() -> io::Result<()> {
 
     stdout.reset()?;
     Ok(())
+}
+
+// Detect if the line marks the beginning of a hunk.
+fn starts_hunk(buf: &[u8]) -> bool {
+    let nbytes = skip_all_escape_code(&buf);
+    buf.iter().skip(nbytes).next() == Some(&b'@')
 }
 
 fn is_ansi_text_attribute(current: u8) -> Option<AnsiTextFormatting> {
@@ -93,11 +111,33 @@ enum AnsiTextFormatting {
     BackgroundWhite,
 }
 
-fn parse_escape_code_prefix(bytes: &[u8]) -> Option<Vec<AnsiTextFormatting>> {
-    eat_parse_escape_codes(&mut bytes.iter())
+// Returns the number of bytes of escape code.
+fn skip_all_escape_code(buf: &[u8]) -> usize {
+    // Skip one sequence
+    fn skip_escape_code(buf: &[u8]) -> Option<usize> {
+        let mut it = buf.iter().enumerate();
+        if *it.next()?.1 == b'\x1b' && *it.next()?.1 == b'[' {
+            loop {
+                match it.next() {
+                    Some((index, b'm')) => return Some(index + 1),
+                    Some(_) => continue,
+                    None => return None,
+                }
+            }
+        }
+        None
+    }
+    let mut buf = buf;
+    let mut sum = 0;
+    while let Some(nbytes) = skip_escape_code(&buf) {
+        buf = &buf[nbytes..];
+        sum += nbytes
+    }
+    sum
 }
 
-fn eat_parse_escape_codes(it: &mut std::slice::Iter<u8>) -> Option<Vec<AnsiTextFormatting>> {
+fn parse_escape_code_prefix(bytes: &[u8]) -> Option<Vec<AnsiTextFormatting>> {
+    let it = &mut bytes.iter();
     let mut result = vec![];
     if *it.next()? == b'\x1b' && *it.next()? == b'[' {
         let mut previous = None;
@@ -106,10 +146,10 @@ fn eat_parse_escape_codes(it: &mut std::slice::Iter<u8>) -> Option<Vec<AnsiTextF
             match previous {
                 None => previous = Some(*it.next()?),
                 Some(b'm') => {
-                     if let Some(value) = completed_sequence {
+                    if let Some(value) = completed_sequence {
                         result.push(value);
                     }
-                    return Some(result)
+                    return Some(result);
                 }
                 Some(b';') => {
                     // if a sequence is completed, register it
@@ -127,36 +167,30 @@ fn eat_parse_escape_codes(it: &mut std::slice::Iter<u8>) -> Option<Vec<AnsiTextF
                     let currbyte = *it.next()?;
                     dbg!((prevbyte, currbyte));
                     match currbyte {
-                        b'm' => {
-                            match completed_sequence {
-                                None => {
-                                    let value = is_ansi_text_attribute(prevbyte)?;
-                                    result.push(value);
-                                    return Some(result)
-                                }
-                                Some(_) => return None
+                        b'm' => match completed_sequence {
+                            None => {
+                                let value = is_ansi_text_attribute(prevbyte)?;
+                                result.push(value);
+                                return Some(result);
                             }
-                        }
-                        b';' => {
-                            match completed_sequence {
-                                None => {
-                                    let value = is_ansi_text_attribute(prevbyte)?;
-                                    completed_sequence = Some(value);
-                                    previous = Some(b';')
-                                }
-                                Some(_) => return None
+                            Some(_) => return None,
+                        },
+                        b';' => match completed_sequence {
+                            None => {
+                                let value = is_ansi_text_attribute(prevbyte)?;
+                                completed_sequence = Some(value);
+                                previous = Some(b';')
                             }
-                        }
-                        _ => {
-                            match completed_sequence {
-                                None => {
-                                    let value = is_ansi_color_attribute(prevbyte, currbyte)?;
-                                    completed_sequence = Some(value);
-                                    previous = None
-                                }
-                                Some(_) => return None
+                            Some(_) => return None,
+                        },
+                        _ => match completed_sequence {
+                            None => {
+                                let value = is_ansi_color_attribute(prevbyte, currbyte)?;
+                                completed_sequence = Some(value);
+                                previous = None
                             }
-                        }
+                            Some(_) => return None,
+                        },
                     }
                 }
             }
@@ -186,39 +220,13 @@ fn parse_color_escape_code_prefix_simple_empty() {
 fn parse_color_escape_code_prefix_simple_cases() {
     assert_eq!(
         Some(vec![ForegroundGreen]),
-        parse_escape_code_prefix(b"\x1b[32m"));
+        parse_escape_code_prefix(b"\x1b[32m")
+    );
     assert_eq!(
         Some(vec![ForegroundRed]),
         parse_escape_code_prefix(b"\x1b[31m")
     );
-    assert_eq!(
-        Some(vec![Underline]),
-        parse_escape_code_prefix(b"\x1b[4m")
-    );
-}
-
-#[test]
-fn parse_color_escape_code_prefix_with_iterator() {
-    let mut it = b"\x1b[32m".iter();
-    assert_eq!(
-        Some(vec![ForegroundGreen]),
-        eat_parse_escape_codes(&mut it)
-    );
-    assert_eq!(0, it.count());
-
-    let mut it = b"\x1b[31m".iter();
-    assert_eq!(
-        Some(vec![ForegroundRed]),
-        eat_parse_escape_codes(&mut it)
-    );
-    assert_eq!(0, it.count());
-
-    let mut it = b"\x1b[4m".iter();
-    assert_eq!(
-        Some(vec![Underline]),
-        eat_parse_escape_codes(&mut it)
-    );
-    assert_eq!(0, it.count());
+    assert_eq!(Some(vec![Underline]), parse_escape_code_prefix(b"\x1b[4m"));
 }
 
 #[test]
@@ -243,4 +251,21 @@ fn parse_color_escape_code_reset_on_double_59() {
         Some(vec![Bold, BackgroundGreen]),
         parse_escape_code_prefix(b"\x1b[8;;1;42m")
     );
+}
+
+#[test]
+fn starts_hunk_test() {
+    assert!(starts_hunk(b"@@@"));
+    assert!(starts_hunk(b"\x1b[42m@@@"));
+    assert!(starts_hunk(b"\x1b[42m\x1b[33m@@@"));
+    assert!(!starts_hunk(b"\x1c[42m@@@"));
+    assert!(!starts_hunk(b"\x1b[42m"));
+    assert!(!starts_hunk(b""));
+}
+
+#[test]
+fn skip_escape_code_test() {
+    assert_eq!(5, skip_all_escape_code(b"\x1b[42m@@@"));
+    assert_eq!(10, skip_all_escape_code(b"\x1b[42m\x1b[33m@@@"));
+    assert_eq!(0, skip_all_escape_code(b"\x1b[42@@@"));
 }
