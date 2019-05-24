@@ -1,0 +1,4 @@
+*.rs text
+*.toml text
+*.lock text
+

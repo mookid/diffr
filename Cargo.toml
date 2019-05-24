@@ -1,0 +1,8 @@
+[package]
+name = "diffr"
+version = "0.1.0"
+authors = ["Nathan Moreau <nathan.moreau@m4x.org>"]
+edition = "2018"
+
+[dependencies]
+termcolor = "1"
