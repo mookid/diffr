@@ -5,6 +5,7 @@ use termcolor::{/*Color,*/ ColorChoice, ColorSpec, StandardStream, WriteColor};
 fn main() -> io::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
+    let mut hunk_buffer = HunkBuffer::new();
     let stdin = io::stdin();
     let mut handle = stdin.lock();
 
@@ -25,21 +26,83 @@ fn main() -> io::Result<()> {
         if buffer.is_empty() {
             break;
         }
-        let color_spec = ColorSpec::new();
-        stdout.set_color(&color_spec)?;
+
+        match first_after_escape(&buffer) {
+            Some(b'+') => hunk_buffer.push_added(&buffer),
+            Some(b'-') => hunk_buffer.push_removed(&buffer),
+            _ => {
+                hunk_buffer.process();
+                hunk_buffer.clear();
+                print!("{}", String::from_utf8_lossy(&buffer));
+            }
+        }
         // dbg!(&String::from_utf8_lossy(&buffer));
-        print!("{}", String::from_utf8_lossy(&buffer));
         buffer.clear();
     }
 
+    // flush remaining hunk
+    hunk_buffer.process();
+
+    let color_spec = ColorSpec::new();
+    stdout.set_color(&color_spec)?;
     stdout.reset()?;
     Ok(())
 }
 
+struct HunkBuffer {
+    added_lines: Vec<u8>,
+    removed_lines: Vec<u8>,
+}
+
+fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
+    dst.extend_from_slice(line)
+}
+
+impl HunkBuffer {
+    fn new() -> Self {
+        HunkBuffer {
+            added_lines: vec![],
+            removed_lines: vec![],
+        }
+    }
+
+    fn clear(&mut self) {
+        self.added_lines.clear();
+        self.removed_lines.clear();
+    }
+
+    fn push_added(&mut self, line: &[u8]) {
+        add_raw_line(&mut self.added_lines, line)
+    }
+
+    fn push_removed(&mut self, line: &[u8]) {
+        add_raw_line(&mut self.removed_lines, line)
+    }
+
+    fn removed_lines(&self) -> &[u8] {
+        &self.removed_lines
+    }
+
+    fn added_lines(&self) -> &[u8] {
+        &self.added_lines
+    }
+
+    fn process(&self) {
+        print!("{}", String::from_utf8_lossy(self.removed_lines()));
+        print!("{}", String::from_utf8_lossy(self.added_lines()));
+    }
+}
+
 // Detect if the line marks the beginning of a hunk.
 fn starts_hunk(buf: &[u8]) -> bool {
+    first_after_escape(buf) == Some(b'@')
+}
+
+// Detect if the line starts with exactly one of the given bytes, after escape
+// code bytes.
+fn first_after_escape(buf: &[u8]) -> Option<u8> {
     let nbytes = skip_all_escape_code(&buf);
-    buf.iter().skip(nbytes).next() == Some(&b'@')
+    buf.iter().skip(nbytes).cloned().next()
 }
 
 fn is_ansi_text_attribute(current: u8) -> Option<AnsiTextFormatting> {
