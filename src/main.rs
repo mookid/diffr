@@ -21,7 +21,7 @@ fn main() -> io::Result<()> {
             break;
         }
         // dbg!(&String::from_utf8_lossy(&buffer));
-        print!("{}", String::from_utf8_lossy(&buffer));
+        write!(stdout, "{}", String::from_utf8_lossy(&buffer));
         buffer.clear();
     }
 
@@ -38,7 +38,7 @@ fn main() -> io::Result<()> {
             _ => {
                 hunk_buffer.process(&mut stdout)?;
                 hunk_buffer.clear();
-                print!("{}", String::from_utf8_lossy(&buffer));
+                write!(stdout, "{}", String::from_utf8_lossy(&buffer));
             }
         }
         // dbg!(&String::from_utf8_lossy(&buffer));
@@ -136,7 +136,7 @@ fn output(buf: &[u8], color: termcolor::Color, out: &mut Outstream) -> io::Resul
     } else {
         buf
     };
-    print!("{}", String::from_utf8_lossy(buf));
+    write!(out, "{}", String::from_utf8_lossy(buf));
     out.flush()?;
     out.reset()?;
     if whole_line {
