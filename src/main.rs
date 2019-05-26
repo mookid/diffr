@@ -1,6 +1,11 @@
 use crate::AnsiTextFormatting::*;
-use std::io::{self, BufRead};
-use termcolor::{/*Color,*/ ColorChoice, ColorSpec, StandardStream, WriteColor};
+use std::io::{self, BufRead, Write};
+use termcolor::{
+    Color::{Green, Red},
+    ColorChoice, ColorSpec, StandardStream, WriteColor,
+};
+
+type Outstream = termcolor::StandardStream;
 
 fn main() -> io::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -31,7 +36,7 @@ fn main() -> io::Result<()> {
             Some(b'+') => hunk_buffer.push_added(&buffer),
             Some(b'-') => hunk_buffer.push_removed(&buffer),
             _ => {
-                hunk_buffer.process();
+                hunk_buffer.process(&mut stdout)?;
                 hunk_buffer.clear();
                 print!("{}", String::from_utf8_lossy(&buffer));
             }
@@ -41,11 +46,7 @@ fn main() -> io::Result<()> {
     }
 
     // flush remaining hunk
-    hunk_buffer.process();
-
-    let color_spec = ColorSpec::new();
-    stdout.set_color(&color_spec)?;
-    stdout.reset()?;
+    hunk_buffer.process(&mut stdout)?;
     Ok(())
 }
 
@@ -120,10 +121,18 @@ impl HunkBuffer {
         &self.added_lines
     }
 
-    fn process(&self) {
-        print!("{}", String::from_utf8_lossy(self.removed_lines()));
-        print!("{}", String::from_utf8_lossy(self.added_lines()));
+    fn process(&self, out: &mut Outstream) -> io::Result<()> {
+        output(self.removed_lines(), Red, out)?;
+        output(self.added_lines(), Green, out)?;
+        Ok(())
     }
+}
+
+fn output(buf: &[u8], color: termcolor::Color, out: &mut Outstream) -> io::Result<()> {
+    out.set_color(ColorSpec::new().set_fg(Some(color)))?;
+    print!("{}", String::from_utf8_lossy(buf));
+    out.reset()?;
+    Ok(())
 }
 
 // Detect if the line marks the beginning of a hunk.
