@@ -54,8 +54,41 @@ struct HunkBuffer {
     removed_lines: Vec<u8>,
 }
 
+// Scan buf looking for target, returning the index of its first
+// appearance.
+fn index_of<'a, It>(it: It, target: u8) -> Option<usize>
+where
+    It: std::iter::Iterator<Item = &'a u8>,
+{
+    // let mut it = buf.iter().enumerate();
+    let mut it = it.enumerate();
+    loop {
+        match it.next() {
+            Some((index, c)) => {
+                if *c == target {
+                    return Some(index);
+                }
+            }
+            None => return None,
+        }
+    }
+}
+
+// the number of bytes until either the next escape code or the end of
+// buf
+fn skip_token(buf: &[u8]) -> usize {
+    index_of(buf.iter(), b'\x1b').unwrap_or_else(|| buf.len())
+}
+
 fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
-    dst.extend_from_slice(line)
+    let mut i = 0;
+    let len = line.len();
+    while i < len {
+        i += skip_all_escape_code(&line[i..]);
+        let tok_len = skip_token(&line[i..]);
+        dst.extend_from_slice(&line[i..i + tok_len]);
+        i += tok_len;
+    }
 }
 
 impl HunkBuffer {
@@ -178,17 +211,13 @@ enum AnsiTextFormatting {
 fn skip_all_escape_code(buf: &[u8]) -> usize {
     // Skip one sequence
     fn skip_escape_code(buf: &[u8]) -> Option<usize> {
-        let mut it = buf.iter().enumerate();
-        if *it.next()?.1 == b'\x1b' && *it.next()?.1 == b'[' {
-            loop {
-                match it.next() {
-                    Some((index, b'm')) => return Some(index + 1),
-                    Some(_) => continue,
-                    None => return None,
-                }
-            }
+        let mut it = buf.iter();
+        if *it.next()? == b'\x1b' && *it.next()? == b'[' {
+            // "\x1b[" + sequence body + "m" => 3 additional bytes
+            Some(index_of(it, b'm')? + 3)
+        } else {
+            None
         }
-        None
     }
     let mut buf = buf;
     let mut sum = 0;
@@ -331,4 +360,11 @@ fn skip_escape_code_test() {
     assert_eq!(5, skip_all_escape_code(b"\x1b[42m@@@"));
     assert_eq!(10, skip_all_escape_code(b"\x1b[42m\x1b[33m@@@"));
     assert_eq!(0, skip_all_escape_code(b"\x1b[42@@@"));
+}
+
+#[test]
+fn skip_token_test() {
+    assert_eq!(3, skip_token(b"abc\x1b"));
+    assert_eq!(3, skip_token(b"abc"));
+    assert_eq!(0, skip_token(b"\x1b"));
 }
