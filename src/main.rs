@@ -130,8 +130,18 @@ impl HunkBuffer {
 
 fn output(buf: &[u8], color: termcolor::Color, out: &mut Outstream) -> io::Result<()> {
     out.set_color(ColorSpec::new().set_fg(Some(color)))?;
+    let whole_line = !buf.is_empty() && buf[buf.len() - 1] == b'\n';
+    let buf = if whole_line {
+        &buf[..buf.len() - 1]
+    } else {
+        buf
+    };
     print!("{}", String::from_utf8_lossy(buf));
+    out.flush()?;
     out.reset()?;
+    if whole_line {
+        write!(out, "\n")?;
+    }
     Ok(())
 }
 
