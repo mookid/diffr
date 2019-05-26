@@ -1,21 +1,20 @@
 use std::io::{self, BufRead, Write};
 use termcolor::{
     Color::{Green, Red},
-    ColorChoice, ColorSpec, StandardStream, WriteColor,
+    ColorChoice, ColorSpec, StandardStream,
 };
 
-type Outstream = termcolor::StandardStream;
-
 fn main() -> io::Result<()> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let stdin = io::stdin();
+    let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
     let mut hunk_buffer = HunkBuffer::new();
-    let stdin = io::stdin();
-    let mut handle = stdin.lock();
+    let mut stdin = stdin.lock();
+    let mut stdout = stdout.lock();
 
     // echo everything before the first diff hunk
     loop {
-        handle.read_until(b'\n', &mut buffer)?;
+        stdin.read_until(b'\n', &mut buffer)?;
         if buffer.is_empty() || starts_hunk(&buffer) {
             break;
         }
@@ -26,7 +25,7 @@ fn main() -> io::Result<()> {
 
     // process hunks
     loop {
-        handle.read_until(b'\n', &mut buffer)?;
+        stdin.read_until(b'\n', &mut buffer)?;
         if buffer.is_empty() {
             break;
         }
@@ -120,14 +119,20 @@ impl HunkBuffer {
         &self.added_lines
     }
 
-    fn process(&self, out: &mut Outstream) -> io::Result<()> {
+    fn process<Stream>(&self, out: &mut Stream) -> io::Result<()>
+    where
+        Stream: termcolor::WriteColor,
+    {
         output(self.removed_lines(), Red, out)?;
         output(self.added_lines(), Green, out)?;
         Ok(())
     }
 }
 
-fn output(buf: &[u8], color: termcolor::Color, out: &mut Outstream) -> io::Result<()> {
+fn output<Stream>(buf: &[u8], color: termcolor::Color, out: &mut Stream) -> io::Result<()>
+where
+    Stream: termcolor::WriteColor,
+{
     out.set_color(ColorSpec::new().set_fg(Some(color)))?;
     let whole_line = !buf.is_empty() && buf[buf.len() - 1] == b'\n';
     let buf = if whole_line {
