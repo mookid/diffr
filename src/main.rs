@@ -55,16 +55,16 @@ struct HunkBuffer {
 
 // Scan buf looking for target, returning the index of its first
 // appearance.
-fn index_of<'a, It>(it: It, target: u8) -> Option<usize>
+fn index_of<It>(it: It, target: u8) -> Option<usize>
 where
-    It: std::iter::Iterator<Item = &'a u8>,
+    It: std::iter::Iterator<Item = u8>,
 {
     // let mut it = buf.iter().enumerate();
     let mut it = it.enumerate();
     loop {
         match it.next() {
             Some((index, c)) => {
-                if *c == target {
+                if c == target {
                     return Some(index);
                 }
             }
@@ -76,7 +76,7 @@ where
 // the number of bytes until either the next escape code or the end of
 // buf
 fn skip_token(buf: &[u8]) -> usize {
-    index_of(buf.iter(), b'\x1b').unwrap_or_else(|| buf.len())
+    index_of(buf.iter().cloned(), b'\x1b').unwrap_or_else(|| buf.len())
 }
 
 fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
@@ -123,9 +123,73 @@ impl HunkBuffer {
     where
         Stream: termcolor::WriteColor,
     {
+        fn tokenize(src: &[u8]) -> Vec<&[u8]> {
+            src.split(is_whitespace).collect()
+        }
+
+        let removed_words = tokenize(self.removed_lines());
+        let added_words = tokenize(self.added_lines());
+        // dbg!(added_words
+        //      .map(|buf| String::from_utf8_lossy(buf))
+        //      .collect::<Vec<_>>());
+
+        let _edit_scripts_len = diff_sequences(&removed_words, &added_words);
+
         output(self.removed_lines(), Red, out)?;
         output(self.added_lines(), Green, out)?;
         Ok(())
+    }
+}
+
+// struct Diff {
+//     removed: Vec<u8>,
+//     added: Vec<u8>,
+// }
+
+type Diff = usize;
+
+fn diff_sequences(seq_a: &[&[u8]], seq_b: &[&[u8]]) -> Diff {
+    let n = seq_a.len();
+    let m = seq_b.len();
+    let max = (n + m) as i64;
+    let mut v = vec![0; max as usize * 2 + 1];
+    let convert_index = |index| {
+        assert!(-max <= index);
+        assert!(index <= max);
+        (index + max) as usize
+    };
+    for d in 0..max {
+        for k in -d..=d {
+            if (k - d) % 2 != 0 {
+                continue;
+            }
+            let mut x = {
+                let vkm1 = v[convert_index(k - 1)];
+                let vkp1 = v[convert_index(k + 1)];
+                if k == -d || k == d && vkm1 < vkp1 {
+                    vkp1
+                } else {
+                    vkm1 + 1
+                }
+            };
+            let mut y = (x as i64 - k) as usize;
+            while x < n && y < m && seq_a[x] == seq_b[y] {
+                x += 1;
+                y += 1;
+            }
+            v[convert_index(k)] = x;
+            if n <= x && m <= y {
+                return d as usize;
+            }
+        }
+    }
+    max as usize
+}
+
+fn is_whitespace(b: &u8) -> bool {
+    match *b {
+        b' ' | b'\n' | b'\t' => true,
+        _ => false,
     }
 }
 
@@ -165,8 +229,8 @@ fn first_after_escape(buf: &[u8]) -> Option<u8> {
 fn skip_all_escape_code(buf: &[u8]) -> usize {
     // Skip one sequence
     fn skip_escape_code(buf: &[u8]) -> Option<usize> {
-        let mut it = buf.iter();
-        if *it.next()? == b'\x1b' && *it.next()? == b'[' {
+        let mut it = buf.iter().cloned();
+        if it.next()? == b'\x1b' && it.next()? == b'[' {
             // "\x1b[" + sequence body + "m" => 3 additional bytes
             Some(index_of(it, b'm')? + 3)
         } else {
@@ -204,4 +268,31 @@ fn skip_token_test() {
     assert_eq!(3, skip_token(b"abc\x1b"));
     assert_eq!(3, skip_token(b"abc"));
     assert_eq!(0, skip_token(b"\x1b"));
+}
+
+#[cfg(test)]
+fn diff_sequences_test_edit_script_length(expected_esl: usize, seq_a: &[u8], seq_b: &[u8]) {
+    fn mk_tokens(buf : &[u8]) -> Vec<&[u8]> {
+        (0..buf.len()-1).map(|i| &buf[i..i+1]).collect()
+    };
+    assert_eq!(expected_esl, diff_sequences(&mk_tokens(seq_a), &mk_tokens(seq_b)))
+}
+
+#[test]
+fn diff_sequences_test_1() {
+    diff_sequences_test_edit_script_length(5, b"abcabba", b"cbabac")
+}
+
+#[test]
+fn diff_sequences_test_2() {
+    diff_sequences_test_edit_script_length(6, b"abcy", b"xaxbxabc")
+}
+
+#[test]
+fn range_equality_test() {
+    let range_a = [1,2,3];
+    let range_b = [1,2,3];
+    let range_c = [1,2,4];
+    assert!(range_a == range_b);
+    assert!(range_a != range_c);
 }
