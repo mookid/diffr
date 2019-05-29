@@ -228,15 +228,11 @@ fn diff_sequences(seq_a: &[&[u8]], seq_b: &[&[u8]]) -> Diff {
             let mut x = path.last_point().0;
             let mut y = (x as i64 - k) as usize;
             path.push(x, y);
-            let mut snake = false;
             while x < n && y < m && seq_a[x] == seq_b[y] {
                 x += 1;
                 y += 1;
-                snake = true;
             }
-            if snake {
-                path.push(x, y);
-            }
+            path.push(x, y);
             v[convert_index(k)] = path;
             if n <= x && m <= y {
                 return v[convert_index(k)].clone();
