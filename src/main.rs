@@ -18,7 +18,6 @@ fn main() -> io::Result<()> {
         if buffer.is_empty() || starts_hunk(&buffer) {
             break;
         }
-        // dbg!(&String::from_utf8_lossy(&buffer));
         write!(stdout, "{}", String::from_utf8_lossy(&buffer))?;
         buffer.clear();
     }
@@ -123,10 +122,6 @@ impl HunkBuffer {
     where
         Stream: termcolor::WriteColor,
     {
-        fn tokenize(src: &[u8]) -> Vec<&[u8]> {
-            src.split(is_whitespace).collect()
-        }
-
         let removed_words = tokenize(self.removed_lines());
         let added_words = tokenize(self.added_lines());
         // dbg!(added_words
@@ -139,6 +134,25 @@ impl HunkBuffer {
         output(self.added_lines(), Some(Green), out)?;
         Ok(())
     }
+}
+
+fn tokenize(src: &[u8]) -> Vec<&[u8]> {
+    let mut tokens = vec![];
+    let mut lo = 0;
+    let mut it = src.iter().clone().enumerate();
+    while let Some((hi, b)) = it.next() {
+        if !is_alphanum(*b) {
+            if lo < hi {
+                tokens.push(&src[lo..hi]);
+            }
+            tokens.push(&src[hi..hi + 1]);
+            lo = hi + 1
+        }
+    }
+    if lo < src.len() {
+        tokens.push(&src[lo..src.len()]);
+    }
+    tokens
 }
 
 type Point = (usize, usize);
@@ -232,9 +246,9 @@ fn diff_sequences(seq_a: &[&[u8]], seq_b: &[&[u8]]) -> Diff {
     Diff::new(vec![(0, 0), (0, m), (n, m)])
 }
 
-fn is_whitespace(b: &u8) -> bool {
-    match *b {
-        b' ' | b'\n' | b'\t' => true,
+fn is_alphanum(b: u8) -> bool {
+    match b {
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => true,
         _ => false,
     }
 }
@@ -293,12 +307,30 @@ fn skip_all_escape_code(buf: &[u8]) -> usize {
 }
 
 #[cfg(test)]
+fn string_of_bytes(buf: &[u8]) -> String {
+    String::from_utf8_lossy(buf).into()
+}
+
+#[cfg(test)]
+fn to_strings(buf: &[&[u8]]) -> Vec<String> {
+    mk_vec(buf.iter().map(|buf| string_of_bytes(buf)))
+}
+
+#[cfg(test)]
+fn mk_vec<It, T>(it: It) -> Vec<T>
+where
+    It: std::iter::Iterator<Item = T>,
+{
+    it.collect()
+}
+
+#[cfg(test)]
 fn diff_sequences_test_edit(seq_a: &[u8], seq_b: &[u8]) {
     fn mk_tokens(buf: &[u8]) -> Vec<&[u8]> {
         (0..buf.len()).map(|i| &buf[i..i + 1]).collect()
     };
-    dbg!(String::from_utf8_lossy(&seq_a));
-    dbg!(String::from_utf8_lossy(&seq_b));
+    dbg!(string_of_bytes(&seq_a));
+    dbg!(string_of_bytes(&seq_b));
 
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut stdout = stdout.lock();
@@ -382,4 +414,30 @@ fn range_equality_test() {
 fn aligned_test() {
     assert!(aligned(&(1, 3), &(2, 2), &(3, 1)));
     assert!(!aligned(&(1, 3), &(2, 2), &(3, 2)));
+}
+
+#[test]
+fn tokenize_test() {
+    fn test(expected: &[&str], buf: &[u8]) {
+        let tokens = tokenize(buf);
+        assert_eq!(buf.len(), tokens.iter().map(|buf| buf.len()).sum());
+        for token in &tokens {
+            assert!(token.len() != 0)
+        }
+        assert_eq!(
+            mk_vec(buf.iter()),
+            mk_vec(tokens.iter().flat_map(|buf| buf.iter()))
+        );
+
+        assert_eq!(expected, &to_strings(&tokens[..])[..]);
+    }
+    test(&[], b"");
+    test(&[" "], b" ");
+    test(&["a"], b"a");
+    test(&["abcd", " ", "defg", " "], b"abcd defg ");
+    test(&["abcd", " ", "defg"], b"abcd defg");
+    test(
+        &["*", "(", "abcd", ")", " ", "#", "[", "efgh", "]"],
+        b"*(abcd) #[efgh]",
+    );
 }
