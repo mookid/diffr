@@ -292,30 +292,6 @@ fn skip_all_escape_code(buf: &[u8]) -> usize {
     sum
 }
 
-#[test]
-fn starts_hunk_test() {
-    assert!(starts_hunk(b"@@@"));
-    assert!(starts_hunk(b"\x1b[42m@@@"));
-    assert!(starts_hunk(b"\x1b[42m\x1b[33m@@@"));
-    assert!(!starts_hunk(b"\x1c[42m@@@"));
-    assert!(!starts_hunk(b"\x1b[42m"));
-    assert!(!starts_hunk(b""));
-}
-
-#[test]
-fn skip_escape_code_test() {
-    assert_eq!(5, skip_all_escape_code(b"\x1b[42m@@@"));
-    assert_eq!(10, skip_all_escape_code(b"\x1b[42m\x1b[33m@@@"));
-    assert_eq!(0, skip_all_escape_code(b"\x1b[42@@@"));
-}
-
-#[test]
-fn skip_token_test() {
-    assert_eq!(3, skip_token(b"abc\x1b"));
-    assert_eq!(3, skip_token(b"abc"));
-    assert_eq!(0, skip_token(b"\x1b"));
-}
-
 #[cfg(test)]
 fn diff_sequences_test_edit(seq_a: &[u8], seq_b: &[u8]) {
     fn mk_tokens(buf: &[u8]) -> Vec<&[u8]> {
@@ -352,6 +328,30 @@ fn diff_sequences_test_edit(seq_a: &[u8], seq_b: &[u8]) {
     }
     writeln!(stdout).unwrap();
     stdout.flush().unwrap();
+}
+
+#[test]
+fn starts_hunk_test() {
+    assert!(starts_hunk(b"@@@"));
+    assert!(starts_hunk(b"\x1b[42m@@@"));
+    assert!(starts_hunk(b"\x1b[42m\x1b[33m@@@"));
+    assert!(!starts_hunk(b"\x1c[42m@@@"));
+    assert!(!starts_hunk(b"\x1b[42m"));
+    assert!(!starts_hunk(b""));
+}
+
+#[test]
+fn skip_escape_code_test() {
+    assert_eq!(5, skip_all_escape_code(b"\x1b[42m@@@"));
+    assert_eq!(10, skip_all_escape_code(b"\x1b[42m\x1b[33m@@@"));
+    assert_eq!(0, skip_all_escape_code(b"\x1b[42@@@"));
+}
+
+#[test]
+fn skip_token_test() {
+    assert_eq!(3, skip_token(b"abc\x1b"));
+    assert_eq!(3, skip_token(b"abc"));
+    assert_eq!(0, skip_token(b"\x1b"));
 }
 
 #[test]
