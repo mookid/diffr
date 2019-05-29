@@ -133,57 +133,103 @@ impl HunkBuffer {
         //      .map(|buf| String::from_utf8_lossy(buf))
         //      .collect::<Vec<_>>());
 
-        let _edit_scripts_len = diff_sequences(&removed_words, &added_words);
+        let _diff = diff_sequences(&removed_words, &added_words);
 
-        output(self.removed_lines(), Red, out)?;
-        output(self.added_lines(), Green, out)?;
+        output(self.removed_lines(), Some(Red), out)?;
+        output(self.added_lines(), Some(Green), out)?;
         Ok(())
     }
 }
 
-// struct Diff {
-//     removed: Vec<u8>,
-//     added: Vec<u8>,
-// }
+type Point = (usize, usize);
 
-type Diff = usize;
+#[derive(Clone, Debug)]
+struct Diff {
+    points: Vec<Point>,
+}
+
+impl Diff {
+    fn new(points: Vec<(usize, usize)>) -> Diff {
+        Diff { points }
+    }
+
+    fn empty() -> Diff {
+        Diff::new(vec![])
+    }
+
+    fn last_point(&self) -> &(usize, usize) {
+        self.points.iter().next_back().unwrap_or(&(0, 0))
+    }
+
+    fn push(&mut self, x: usize, y: usize) {
+        let mut it = self.points.iter_mut();
+        let z2 = (x, y);
+        let z1 = it.next_back();
+        let z0 = it.next_back();
+        match (z0, z1) {
+            (Some(ref z0), Some(ref mut z1)) if aligned(z0, z1, &z2) => **z1 = z2,
+            _ => self.points.push(z2),
+        }
+    }
+}
+
+fn aligned(z0: &Point, z1: &Point, z2: &Point) -> bool {
+    fn vector(z0: &Point, z1: &Point) -> (i64, i64) {
+        (z1.0 as i64 - z0.0 as i64, z1.1 as i64 - z0.1 as i64)
+    }
+    let v01 = vector(z0, z1);
+    let v02 = vector(z0, z2);
+    v01.0 * v02.1 == v01.1 * v02.0
+}
 
 fn diff_sequences(seq_a: &[&[u8]], seq_b: &[&[u8]]) -> Diff {
     let n = seq_a.len();
     let m = seq_b.len();
     let max = (n + m) as i64;
-    let mut v = vec![0; max as usize * 2 + 1];
+    let mut v = vec![Diff::empty(); max as usize * 2 + 1];
     let convert_index = |index| {
         assert!(-max <= index);
         assert!(index <= max);
         (index + max) as usize
     };
     for d in 0..max {
-        for k in -d..=d {
-            if (k - d) % 2 != 0 {
-                continue;
-            }
-            let mut x = {
-                let vkm1 = v[convert_index(k - 1)];
-                let vkp1 = v[convert_index(k + 1)];
-                if k == -d || k == d && vkm1 < vkp1 {
-                    vkp1
+        for k in (-d..=d).step_by(2) {
+            assert_eq!((k - d) % 2, 0);
+            let mut path = {
+                let vkp1: &Diff = &v[convert_index(k + 1)];
+                if k == -d {
+                    vkp1.clone()
                 } else {
-                    vkm1 + 1
+                    let vkm1 = &v[convert_index(k - 1)];
+                    if k == d && vkm1.last_point().0 < vkp1.last_point().0 {
+                        vkp1.clone()
+                    } else {
+                        let mut res = vkm1.clone();
+                        let last_point = res.last_point();
+                        res.push(last_point.0 + 1, last_point.1);
+                        res
+                    }
                 }
             };
+            let mut x = path.last_point().0;
             let mut y = (x as i64 - k) as usize;
+            path.push(x, y);
+            let mut snake = false;
             while x < n && y < m && seq_a[x] == seq_b[y] {
                 x += 1;
                 y += 1;
+                snake = true;
             }
-            v[convert_index(k)] = x;
+            if snake {
+                path.push(x, y);
+            }
+            v[convert_index(k)] = path;
             if n <= x && m <= y {
-                return d as usize;
+                return v[convert_index(k)].clone();
             }
         }
     }
-    max as usize
+    Diff::new(vec![(0, 0), (0, m), (n, m)])
 }
 
 fn is_whitespace(b: &u8) -> bool {
@@ -193,11 +239,11 @@ fn is_whitespace(b: &u8) -> bool {
     }
 }
 
-fn output<Stream>(buf: &[u8], color: termcolor::Color, out: &mut Stream) -> io::Result<()>
+fn output<Stream>(buf: &[u8], color: Option<termcolor::Color>, out: &mut Stream) -> io::Result<()>
 where
     Stream: termcolor::WriteColor,
 {
-    out.set_color(ColorSpec::new().set_fg(Some(color)))?;
+    out.set_color(ColorSpec::new().set_fg(color))?;
     let whole_line = !buf.is_empty() && buf[buf.len() - 1] == b'\n';
     let buf = if whole_line {
         &buf[..buf.len() - 1]
@@ -271,28 +317,69 @@ fn skip_token_test() {
 }
 
 #[cfg(test)]
-fn diff_sequences_test_edit_script_length(expected_esl: usize, seq_a: &[u8], seq_b: &[u8]) {
-    fn mk_tokens(buf : &[u8]) -> Vec<&[u8]> {
-        (0..buf.len()-1).map(|i| &buf[i..i+1]).collect()
+fn diff_sequences_test_edit(seq_a: &[u8], seq_b: &[u8]) {
+    fn mk_tokens(buf: &[u8]) -> Vec<&[u8]> {
+        (0..buf.len()).map(|i| &buf[i..i + 1]).collect()
     };
-    assert_eq!(expected_esl, diff_sequences(&mk_tokens(seq_a), &mk_tokens(seq_b)))
+    dbg!(String::from_utf8_lossy(&seq_a));
+    dbg!(String::from_utf8_lossy(&seq_b));
+
+    let stdout = StandardStream::stdout(ColorChoice::Always);
+    let mut stdout = stdout.lock();
+
+    let toks_a = mk_tokens(seq_a);
+    let toks_b = mk_tokens(seq_b);
+
+    let diff = &diff_sequences(&toks_a, &toks_b).points;
+
+    for p in diff.windows(2) {
+        let (x0, y0) = p[0];
+        let (x1, y1) = p[1];
+        let color = if y0 != y1 { None } else { Some(Red) };
+        for tok in &toks_a[x0..x1] {
+            output(tok, color, &mut stdout).unwrap();
+        }
+    }
+    writeln!(stdout).unwrap();
+
+    for p in diff.windows(2) {
+        let (x0, y0) = p[0];
+        let (x1, y1) = p[1];
+        let color = if x0 != x1 { None } else { Some(Green) };
+        for tok in &toks_b[y0..y1] {
+            output(tok, color, &mut stdout).unwrap();
+        }
+    }
+    writeln!(stdout).unwrap();
+    stdout.flush().unwrap();
 }
 
 #[test]
 fn diff_sequences_test_1() {
-    diff_sequences_test_edit_script_length(5, b"abcabba", b"cbabac")
+    diff_sequences_test_edit(b"abcabba", b"cbabac")
 }
 
 #[test]
 fn diff_sequences_test_2() {
-    diff_sequences_test_edit_script_length(6, b"abcy", b"xaxbxabc")
+    diff_sequences_test_edit(b"abcy", b"xaxbxabc")
+}
+
+#[test]
+fn diff_sequences_test_3() {
+    diff_sequences_test_edit(b"abc", b"defgh")
 }
 
 #[test]
 fn range_equality_test() {
-    let range_a = [1,2,3];
-    let range_b = [1,2,3];
-    let range_c = [1,2,4];
+    let range_a = [1, 2, 3];
+    let range_b = [1, 2, 3];
+    let range_c = [1, 2, 4];
     assert!(range_a == range_b);
     assert!(range_a != range_c);
+}
+
+#[test]
+fn aligned_test() {
+    assert!(aligned(&(1, 3), &(2, 2), &(3, 1)));
+    assert!(!aligned(&(1, 3), &(2, 2), &(3, 2)));
 }
