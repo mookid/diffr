@@ -401,7 +401,9 @@ where
 
 #[cfg(test)]
 fn diff_sequences_test_edit(
-    expected: &[(&[u8], Option<termcolor::Color>)],
+    expected: &[(&[u8], DiffKind)],
+    expected_added: &[(&[u8], DiffKind)],
+    expected_removed: &[(&[u8], DiffKind)],
     seq_a: &[u8],
     seq_b: &[u8],
 ) {
@@ -414,23 +416,37 @@ fn diff_sequences_test_edit(
 
     let diff = &diff_sequences(&toks_a, &toks_b);
     let mut output = vec![];
-
+    let mut output_added = vec![];
+    let mut output_removed = vec![];
     for item in diff.path() {
-        if item.kind() == Added {
-            continue;
-        }
-        for tok in &toks_a[item.start_removed()..item.start_removed() + item.len()] {
-            output.push((tok.to_vec(), item.kind().color()));
-        }
-    }
-    output.push((vec![0], None));
-
-    for item in diff.path() {
-        if item.kind() == Removed {
-            continue;
-        }
-        for tok in &toks_b[item.start_added()..item.start_added() + item.len()] {
-            output.push((tok.to_vec(), item.kind().color()));
+        let kind = item.kind();
+        match kind {
+            Keep => {
+                for tok in toks_a[item.start_removed()..item.start_removed() + item.len()]
+                    .iter()
+                    .zip(&toks_b[item.start_added()..item.start_added() + item.len()])
+                    .map(|(tok_a, tok_b)| {
+                        assert_eq!(tok_a, tok_b);
+                        tok_a
+                    })
+                {
+                    output.push((tok.to_vec(), kind));
+                    output_added.push((tok.to_vec(), kind));
+                    output_removed.push((tok.to_vec(), kind));
+                }
+            }
+            Added => {
+                for tok in &toks_b[item.start_added()..item.start_added() + item.len()] {
+                    output.push((tok.to_vec(), kind));
+                    output_added.push((tok.to_vec(), kind));
+                }
+            }
+            Removed => {
+                for tok in &toks_a[item.start_removed()..item.start_removed() + item.len()] {
+                    output.push((tok.to_vec(), kind));
+                    output_removed.push((tok.to_vec(), kind));
+                }
+            }
         }
     }
 
@@ -440,8 +456,44 @@ fn diff_sequences_test_edit(
             match last_mut(&mut res) {
                 None => res.push(item.clone()),
                 Some((values, c)) => {
-                    let &(buf, color) = &item;
-                    if c == color {
+                    let &(buf, kind) = &item;
+                    if c == kind {
+                        values.extend_from_slice(&buf)
+                    } else {
+                        res.push(item.clone())
+                    }
+                }
+            }
+        }
+        res
+    };
+
+    let output_removed = {
+        let mut res = vec![];
+        for item in output_removed.iter() {
+            match last_mut(&mut res) {
+                None => res.push(item.clone()),
+                Some((values, c)) => {
+                    let &(buf, kind) = &item;
+                    if c == kind {
+                        values.extend_from_slice(&buf)
+                    } else {
+                        res.push(item.clone())
+                    }
+                }
+            }
+        }
+        res
+    };
+
+    let output_added = {
+        let mut res = vec![];
+        for item in output_added.iter() {
+            match last_mut(&mut res) {
+                None => res.push(item.clone()),
+                Some((values, c)) => {
+                    let &(buf, kind) = &item;
+                    if c == kind {
                         values.extend_from_slice(&buf)
                     } else {
                         res.push(item.clone())
@@ -452,8 +504,12 @@ fn diff_sequences_test_edit(
         res
     };
     let output = mk_vec(output.iter().map(|(vec, c)| (&vec[..], c.clone())));
+    let output_added = mk_vec(output_added.iter().map(|(vec, c)| (&vec[..], c.clone())));
+    let output_removed = mk_vec(output_removed.iter().map(|(vec, c)| (&vec[..], c.clone())));
 
     assert_eq!(expected, &output[..]);
+    assert_eq!(expected_added, &output_added[..]);
+    assert_eq!(expected_removed, &output_removed[..]);
 }
 
 #[test]
@@ -484,14 +540,14 @@ fn skip_token_test() {
 fn diff_sequences_test_1() {
     diff_sequences_test_edit(
         &[
-            (b"abc", None),
-            (b"abba", Some(Red)),
-            (b"\x00", None),
-            (b"cb", Some(Green)),
-            (b"ab", None),
-            (b"a", Some(Green)),
-            (b"c", None),
+            (b"cb", Added),
+            (b"ab", Keep),
+            (b"a", Added),
+            (b"c", Keep),
+            (b"abba", Removed),
         ],
+        &[(b"cb", Added), (b"ab", Keep), (b"a", Added), (b"c", Keep)],
+        &[(b"abc", Keep), (b"abba", Removed)],
         b"abcabba",
         b"cbabac",
     )
@@ -501,16 +557,23 @@ fn diff_sequences_test_1() {
 fn diff_sequences_test_2() {
     diff_sequences_test_edit(
         &[
-            (b"abc", None),
-            (b"y", Some(Red)),
-            (b"\x00", None),
-            (b"x", Some(Green)),
-            (b"a", None),
-            (b"x", Some(Green)),
-            (b"b", None),
-            (b"xab", Some(Green)),
-            (b"c", None),
+            (b"x", Added),
+            (b"a", Keep),
+            (b"x", Added),
+            (b"b", Keep),
+            (b"xab", Added),
+            (b"c", Keep),
+            (b"y", Removed),
         ],
+        &[
+            (b"x", Added),
+            (b"a", Keep),
+            (b"x", Added),
+            (b"b", Keep),
+            (b"xab", Added),
+            (b"c", Keep),
+        ],
+        &[(b"abc", Keep), (b"y", Removed)],
         b"abcy",
         b"xaxbxabc",
     )
@@ -519,11 +582,9 @@ fn diff_sequences_test_2() {
 #[test]
 fn diff_sequences_test_3() {
     diff_sequences_test_edit(
-        &[
-            (b"abc", Some(Red)),
-            (b"\x00", None),
-            (b"defgh", Some(Green)),
-        ],
+        &[(b"defgh", Added), (b"abc", Removed)],
+        &[(b"defgh", Added)],
+        &[(b"abc", Removed)],
         b"abc",
         b"defgh",
     )
