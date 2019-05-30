@@ -167,11 +167,6 @@ fn last<T>(slice: &[T]) -> Option<&T> {
     slice.iter().next_back()
 }
 
-#[cfg(test)]
-fn last_mut<T>(slice: &mut [T]) -> Option<&mut T> {
-    slice.iter_mut().next_back()
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiffKind {
     Keep,
@@ -394,9 +389,35 @@ fn to_strings(buf: &[&[u8]]) -> Vec<String> {
 #[cfg(test)]
 fn mk_vec<It, T>(it: It) -> Vec<T>
 where
-    It: std::iter::Iterator<Item = T>,
+    It: Iterator<Item = T>,
 {
     it.collect()
+}
+
+#[cfg(test)]
+fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> {
+    let mut values = values.clone();
+    let mut it = values.iter_mut();
+    let mut result: Vec<(Vec<u8>, DiffKind)> = vec![];
+    let mut current = it.next();
+    while let Some(next) = it.next() {
+        match current {
+            Some(ref mut c) => {
+                if c.1 == next.1 {
+                    c.0.extend_from_slice(&*next.0)
+                } else {
+                    result.push(c.clone());
+                    *c = next;
+                }
+            }
+            None => panic!(),
+        }
+    }
+
+    if let Some(last) = current {
+        result.push(last.clone());
+    }
+    result
 }
 
 #[cfg(test)]
@@ -415,94 +436,42 @@ fn diff_sequences_test_edit(
     let toks_b = mk_tokens(seq_b);
 
     let diff = &diff_sequences(&toks_a, &toks_b);
-    let mut output = vec![];
-    let mut output_added = vec![];
-    let mut output_removed = vec![];
+    let mut path = vec![];
+    let mut path_added = vec![];
+    let mut path_removed = vec![];
+
     for item in diff.path() {
         let kind = item.kind();
-        match kind {
-            Keep => {
-                for tok in toks_a[item.start_removed()..item.start_removed() + item.len()]
-                    .iter()
-                    .zip(&toks_b[item.start_added()..item.start_added() + item.len()])
-                    .map(|(tok_a, tok_b)| {
-                        assert_eq!(tok_a, tok_b);
-                        tok_a
-                    })
-                {
-                    output.push((tok.to_vec(), kind));
-                    output_added.push((tok.to_vec(), kind));
-                    output_removed.push((tok.to_vec(), kind));
-                }
-            }
-            Added => {
-                for tok in &toks_b[item.start_added()..item.start_added() + item.len()] {
-                    output.push((tok.to_vec(), kind));
-                    output_added.push((tok.to_vec(), kind));
-                }
-            }
-            Removed => {
-                for tok in &toks_a[item.start_removed()..item.start_removed() + item.len()] {
-                    output.push((tok.to_vec(), kind));
-                    output_removed.push((tok.to_vec(), kind));
-                }
-            }
+        if kind != Added {
+            path_removed.push(item);
         }
+        if kind != Removed {
+            path_added.push(item);
+        }
+        path.push(item);
     }
 
-    let output = {
-        let mut res = vec![];
-        for item in output.iter() {
-            match last_mut(&mut res) {
-                None => res.push(item.clone()),
-                Some((values, c)) => {
-                    let &(buf, kind) = &item;
-                    if c == kind {
-                        values.extend_from_slice(&buf)
-                    } else {
-                        res.push(item.clone())
-                    }
-                }
-            }
+    let concat = |item: DiffPathItem| {
+        let kind = item.kind();
+        let (toks, start) = if kind != Added {
+            (&toks_a, item.start_removed())
+        } else {
+            (&toks_b, item.start_added())
+        };
+        let mut result = vec![];
+        for buf in &toks[start..start + item.len()] {
+            result.extend_from_slice(buf)
         }
-        res
+        (result, kind)
     };
 
-    let output_removed = {
-        let mut res = vec![];
-        for item in output_removed.iter() {
-            match last_mut(&mut res) {
-                None => res.push(item.clone()),
-                Some((values, c)) => {
-                    let &(buf, kind) = &item;
-                    if c == kind {
-                        values.extend_from_slice(&buf)
-                    } else {
-                        res.push(item.clone())
-                    }
-                }
-            }
-        }
-        res
-    };
+    let output = mk_vec(&mut path.iter().cloned().map(concat));
+    let output_added = mk_vec(path_added.iter().cloned().map(concat));
+    let output_removed = mk_vec(path_removed.iter().cloned().map(concat));
 
-    let output_added = {
-        let mut res = vec![];
-        for item in output_added.iter() {
-            match last_mut(&mut res) {
-                None => res.push(item.clone()),
-                Some((values, c)) => {
-                    let &(buf, kind) = &item;
-                    if c == kind {
-                        values.extend_from_slice(&buf)
-                    } else {
-                        res.push(item.clone())
-                    }
-                }
-            }
-        }
-        res
-    };
+    let output_added = compress_path(&output_added);
+    let output_removed = compress_path(&output_removed);
+
     let output = mk_vec(output.iter().map(|(vec, c)| (&vec[..], c.clone())));
     let output_added = mk_vec(output_added.iter().map(|(vec, c)| (&vec[..], c.clone())));
     let output_removed = mk_vec(output_removed.iter().map(|(vec, c)| (&vec[..], c.clone())));
@@ -510,6 +479,43 @@ fn diff_sequences_test_edit(
     assert_eq!(expected, &output[..]);
     assert_eq!(expected_added, &output_added[..]);
     assert_eq!(expected_removed, &output_removed[..]);
+}
+
+#[test]
+fn compress_path_test() {
+    let test = |expected: Vec<(Vec<u8>, DiffKind)>, input| {
+        assert_eq!(expected, compress_path(&input));
+    };
+
+    test(vec![], vec![]);
+
+    test(
+        vec![(b"abc".to_vec(), Added)],
+        vec![(b"abc".to_vec(), Added)],
+    );
+    test(
+        vec![(b"abcdef".to_vec(), Added)],
+        vec![(b"abc".to_vec(), Added), (b"def".to_vec(), Added)],
+    );
+    test(
+        vec![(b"abc".to_vec(), Added), (b"def".to_vec(), Removed)],
+        vec![(b"abc".to_vec(), Added), (b"def".to_vec(), Removed)],
+    );
+
+    test(
+        vec![
+            (b"abc".to_vec(), Added),
+            (b"defghijkl".to_vec(), Removed),
+            (b"xyz".to_vec(), Keep),
+        ],
+        vec![
+            (b"abc".to_vec(), Added),
+            (b"def".to_vec(), Removed),
+            (b"ghi".to_vec(), Removed),
+            (b"jkl".to_vec(), Removed),
+            (b"xyz".to_vec(), Keep),
+        ],
+    );
 }
 
 #[test]
@@ -638,24 +644,25 @@ fn color_test() {
 
 #[test]
 fn path_test() {
-    assert_eq!(
-        vec![
+    fn test(expected: &[DiffPathItem], input: &[(usize, usize)]) {
+        assert_eq!(expected.to_vec(), mk_vec(Diff::new(input.to_vec()).path()));
+    }
+    test(
+        &[
             DiffPathItem(Keep, 1, 0, 0),
             DiffPathItem(Added, 2, 1, 1),
             DiffPathItem(Removed, 4, 1, 3),
         ],
-        mk_vec(Diff::new(vec![(0, 0), (1, 1), (1, 3), (5, 3)]).path())
+        &[(0, 0), (1, 1), (1, 3), (5, 3)],
     );
 
-    assert_eq!(
-        vec![
+    test(
+        &[
             DiffPathItem(Keep, 1, 0, 0),
             DiffPathItem(Keep, 1, 1, 1),
             DiffPathItem(Added, 1, 2, 2),
             DiffPathItem(Removed, 3, 2, 3),
         ],
-        // NOTE: this should not happen because path are compressed at
-        // coordinate computation time.
-        mk_vec(Diff::new(vec![(0, 0), (1, 1), (2, 2), (2, 3), (5, 3)]).path())
+        &[(0, 0), (1, 1), (2, 2), (2, 3), (5, 3)],
     );
 }
