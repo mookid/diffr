@@ -1,3 +1,4 @@
+use crate::DiffKind::*;
 use std::io::{self, BufRead, Write};
 use termcolor::{
     Color::{Green, Red},
@@ -171,6 +172,71 @@ fn last_mut<T>(slice: &mut [T]) -> Option<&mut T> {
     slice.iter_mut().next_back()
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DiffKind {
+    Keep,
+    Added,
+    Removed,
+}
+
+impl DiffKind {
+    fn color(&self) -> Option<termcolor::Color> {
+        match self {
+            Keep => None,
+            Added => Some(Green),
+            Removed => Some(Red),
+        }
+    }
+}
+
+// The kind of diff and the size of the piece of diff
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DiffPathItem(DiffKind, usize, usize, usize);
+
+impl DiffPathItem {
+    fn kind(&self) -> DiffKind {
+        self.0
+    }
+
+    fn len(&self) -> usize {
+        self.1
+    }
+
+    fn start_removed(&self) -> usize {
+        self.2
+    }
+
+    fn start_added(&self) -> usize {
+        self.3
+    }
+}
+
+struct Path<'a>(std::slice::Windows<'a, Point>);
+
+impl<'a> Path<'a> {
+    fn new(diff: &'a Diff) -> Self {
+        Path(diff.points.windows(2))
+    }
+}
+
+impl<'a> Iterator for Path<'a> {
+    type Item = DiffPathItem;
+    fn next(self: &mut Self) -> Option<Self::Item> {
+        self.0.next().map(|pair| {
+            let (x0, y0) = pair[0];
+            let (x1, y1) = pair[1];
+            let (kind, len) = match (x0 != x1, y0 != y1) {
+                (true, true) => (Keep, x1 - x0),
+                (false, true) => (Added, y1 - y0),
+                (true, false) => (Removed, x1 - x0),
+                (false, false) => panic!("invariant error: duplicate point"),
+            };
+            assert!(0 < len);
+            DiffPathItem(kind, len as usize, x0, y0)
+        })
+    }
+}
+
 impl Diff {
     fn new(points: Vec<(usize, usize)>) -> Diff {
         Diff { points }
@@ -193,6 +259,10 @@ impl Diff {
             (Some(ref z0), Some(ref mut z1)) if aligned(z0, z1, &z2) => **z1 = z2,
             _ => self.points.push(z2),
         }
+    }
+
+    fn path(&self) -> Path {
+        return Path::new(&self);
     }
 }
 
@@ -342,25 +412,25 @@ fn diff_sequences_test_edit(
     let toks_a = mk_tokens(seq_a);
     let toks_b = mk_tokens(seq_b);
 
-    let diff = &diff_sequences(&toks_a, &toks_b).points;
+    let diff = &diff_sequences(&toks_a, &toks_b);
     let mut output = vec![];
 
-    for p in diff.windows(2) {
-        let (x0, y0) = p[0];
-        let (x1, y1) = p[1];
-        let color = if y0 != y1 { None } else { Some(Red) };
-        for tok in &toks_a[x0..x1] {
-            output.push((tok.to_vec(), color));
+    for item in diff.path() {
+        if item.kind() == Added {
+            continue;
+        }
+        for tok in &toks_a[item.start_removed()..item.start_removed() + item.len()] {
+            output.push((tok.to_vec(), item.kind().color()));
         }
     }
     output.push((vec![0], None));
 
-    for p in diff.windows(2) {
-        let (x0, y0) = p[0];
-        let (x1, y1) = p[1];
-        let color = if x0 != x1 { None } else { Some(Green) };
-        for tok in &toks_b[y0..y1] {
-            output.push((tok.to_vec(), color));
+    for item in diff.path() {
+        if item.kind() == Removed {
+            continue;
+        }
+        for tok in &toks_b[item.start_added()..item.start_added() + item.len()] {
+            output.push((tok.to_vec(), item.kind().color()));
         }
     }
 
@@ -497,5 +567,34 @@ fn tokenize_test() {
     test(
         &["*", "(", "abcd", ")", " ", "#", "[", "efgh", "]"],
         b"*(abcd) #[efgh]",
+    );
+}
+
+#[test]
+fn color_test() {
+    assert_eq!(None, DiffKind::Keep.color());
+}
+
+#[test]
+fn path_test() {
+    assert_eq!(
+        vec![
+            DiffPathItem(Keep, 1, 0, 0),
+            DiffPathItem(Added, 2, 1, 1),
+            DiffPathItem(Removed, 4, 1, 3),
+        ],
+        mk_vec(Diff::new(vec![(0, 0), (1, 1), (1, 3), (5, 3)]).path())
+    );
+
+    assert_eq!(
+        vec![
+            DiffPathItem(Keep, 1, 0, 0),
+            DiffPathItem(Keep, 1, 1, 1),
+            DiffPathItem(Added, 1, 2, 2),
+            DiffPathItem(Removed, 3, 2, 3),
+        ],
+        // NOTE: this should not happen because path are compressed at
+        // coordinate computation time.
+        mk_vec(Diff::new(vec![(0, 0), (1, 1), (2, 2), (2, 3), (5, 3)]).path())
     );
 }
