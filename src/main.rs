@@ -162,6 +162,15 @@ struct Diff {
     points: Vec<Point>,
 }
 
+fn last<T>(slice: &[T]) -> Option<&T> {
+    slice.iter().next_back()
+}
+
+#[cfg(test)]
+fn last_mut<T>(slice: &mut [T]) -> Option<&mut T> {
+    slice.iter_mut().next_back()
+}
+
 impl Diff {
     fn new(points: Vec<(usize, usize)>) -> Diff {
         Diff { points }
@@ -172,7 +181,7 @@ impl Diff {
     }
 
     fn last_point(&self) -> &(usize, usize) {
-        self.points.iter().next_back().unwrap_or(&(0, 0))
+        last(&self.points).unwrap_or(&(0, 0))
     }
 
     fn push(&mut self, x: usize, y: usize) {
@@ -321,41 +330,60 @@ where
 }
 
 #[cfg(test)]
-fn diff_sequences_test_edit(seq_a: &[u8], seq_b: &[u8]) {
+fn diff_sequences_test_edit(
+    expected: &[(&[u8], Option<termcolor::Color>)],
+    seq_a: &[u8],
+    seq_b: &[u8],
+) {
     fn mk_tokens(buf: &[u8]) -> Vec<&[u8]> {
         (0..buf.len()).map(|i| &buf[i..i + 1]).collect()
     };
-    dbg!(string_of_bytes(&seq_a));
-    dbg!(string_of_bytes(&seq_b));
-
-    let stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut stdout = stdout.lock();
 
     let toks_a = mk_tokens(seq_a);
     let toks_b = mk_tokens(seq_b);
 
     let diff = &diff_sequences(&toks_a, &toks_b).points;
+    let mut output = vec![];
 
     for p in diff.windows(2) {
         let (x0, y0) = p[0];
         let (x1, y1) = p[1];
         let color = if y0 != y1 { None } else { Some(Red) };
         for tok in &toks_a[x0..x1] {
-            output(tok, color, &mut stdout).unwrap();
+            output.push((tok.to_vec(), color));
         }
     }
-    writeln!(stdout).unwrap();
+    output.push((vec![0], None));
 
     for p in diff.windows(2) {
         let (x0, y0) = p[0];
         let (x1, y1) = p[1];
         let color = if x0 != x1 { None } else { Some(Green) };
         for tok in &toks_b[y0..y1] {
-            output(tok, color, &mut stdout).unwrap();
+            output.push((tok.to_vec(), color));
         }
     }
-    writeln!(stdout).unwrap();
-    stdout.flush().unwrap();
+
+    let output = {
+        let mut res = vec![];
+        for item in output.iter() {
+            match last_mut(&mut res) {
+                None => res.push(item.clone()),
+                Some((values, c)) => {
+                    let &(buf, color) = &item;
+                    if c == color {
+                        values.extend_from_slice(&buf)
+                    } else {
+                        res.push(item.clone())
+                    }
+                }
+            }
+        }
+        res
+    };
+    let output = mk_vec(output.iter().map(|(vec, c)| (&vec[..], c.clone())));
+
+    assert_eq!(expected, &output[..]);
 }
 
 #[test]
@@ -384,17 +412,51 @@ fn skip_token_test() {
 
 #[test]
 fn diff_sequences_test_1() {
-    diff_sequences_test_edit(b"abcabba", b"cbabac")
+    diff_sequences_test_edit(
+        &[
+            (b"abc", None),
+            (b"abba", Some(Red)),
+            (b"\x00", None),
+            (b"cb", Some(Green)),
+            (b"ab", None),
+            (b"a", Some(Green)),
+            (b"c", None),
+        ],
+        b"abcabba",
+        b"cbabac",
+    )
 }
 
 #[test]
 fn diff_sequences_test_2() {
-    diff_sequences_test_edit(b"abcy", b"xaxbxabc")
+    diff_sequences_test_edit(
+        &[
+            (b"abc", None),
+            (b"y", Some(Red)),
+            (b"\x00", None),
+            (b"x", Some(Green)),
+            (b"a", None),
+            (b"x", Some(Green)),
+            (b"b", None),
+            (b"xab", Some(Green)),
+            (b"c", None),
+        ],
+        b"abcy",
+        b"xaxbxabc",
+    )
 }
 
 #[test]
 fn diff_sequences_test_3() {
-    diff_sequences_test_edit(b"abc", b"defgh")
+    diff_sequences_test_edit(
+        &[
+            (b"abc", Some(Red)),
+            (b"\x00", None),
+            (b"defgh", Some(Green)),
+        ],
+        b"abc",
+        b"defgh",
+    )
 }
 
 #[test]
