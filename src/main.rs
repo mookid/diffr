@@ -1,16 +1,62 @@
 use crate::DiffKind::*;
-use std::io::{self, BufRead, Write};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Write};
 use termcolor::{
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream,
 };
+
+trait Reader {
+    fn next_line(&mut self, buffer: &mut Vec<u8>) -> io::Result<usize>;
+}
+
+impl<'a> Reader for BufRead {
+    fn next_line(&mut self, buffer: &mut Vec<u8>) -> io::Result<usize> {
+        self.read_until(b'\n', buffer)
+    }
+}
+
+fn usage() -> ! {
+    eprintln!("usage:");
+    let process_name = std::env::args().next();
+    let process_name = match process_name {
+        Some(ref pn) => &pn[..],
+        None => "<0>",
+    };
+    eprintln!("\t{}: read from stdin", process_name);
+    eprintln!(
+        "\t{} --input <filename>: read input from file",
+        process_name
+    );
+    std::process::exit(1)
+}
+
+fn mk_reader<'a>(stdin: &'a io::Stdin) -> Box<BufRead + 'a> {
+    let mut args = std::env::args().skip(1);
+    match args.next().as_ref().map(|x| &**x) {
+        Some("--input") => {
+            if let Some(ref path) = args.next() {
+                let file = match File::open(path) {
+                    Ok(f) => f,
+                    Err(e) => panic!("error opening file {}: {}", &path, e),
+                };
+                let stdin = BufReader::new(file);
+                Box::new(stdin)
+            } else {
+                usage()
+            }
+        }
+        Some(_) => usage(),
+        None => Box::new(stdin.lock()),
+    }
+}
 
 fn main() -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
     let mut hunk_buffer = HunkBuffer::new();
-    let mut stdin = stdin.lock();
+    let mut stdin = mk_reader(&stdin);
     let mut stdout = stdout.lock();
 
     let mut time_computing_diff_ms = 0;
