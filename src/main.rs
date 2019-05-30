@@ -13,6 +13,9 @@ fn main() -> io::Result<()> {
     let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
 
+    let mut time_computing_diff_ms = 0;
+    let start = std::time::SystemTime::now();
+
     // echo everything before the first diff hunk
     loop {
         stdin.read_until(b'\n', &mut buffer)?;
@@ -34,9 +37,11 @@ fn main() -> io::Result<()> {
             Some(b'+') => hunk_buffer.push_added(&buffer),
             Some(b'-') => hunk_buffer.push_removed(&buffer),
             _ => {
+                let start = std::time::SystemTime::now();
                 hunk_buffer.process(&mut stdout)?;
                 hunk_buffer.clear();
                 write!(stdout, "{}", String::from_utf8_lossy(&buffer))?;
+                time_computing_diff_ms += start.elapsed().unwrap().as_millis();
             }
         }
         // dbg!(&String::from_utf8_lossy(&buffer));
@@ -45,6 +50,11 @@ fn main() -> io::Result<()> {
 
     // flush remaining hunk
     hunk_buffer.process(&mut stdout)?;
+    eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
+    eprintln!(
+        "total processing time (ms): {}",
+        start.elapsed().unwrap().as_millis()
+    );
     Ok(())
 }
 
