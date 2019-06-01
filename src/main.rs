@@ -391,7 +391,6 @@ where
         buf
     };
     write!(out, "{}", String::from_utf8_lossy(buf))?;
-    out.flush()?;
     out.reset()?;
     if whole_line {
         write!(out, "\n")?;
