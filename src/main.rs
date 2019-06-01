@@ -345,7 +345,7 @@ fn diff_sequences(seq_a: &[&[u8]], seq_b: &[&[u8]]) -> Diff {
                     vkp1.clone()
                 } else {
                     let vkm1 = &v[convert_index(k - 1)];
-                    if k == d && vkm1.last_point().0 < vkp1.last_point().0 {
+                    if k != d && vkm1.last_point().0 < vkp1.last_point().0 {
                         vkp1.clone()
                     } else {
                         let mut res = vkm1.clone();

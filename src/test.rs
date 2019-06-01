@@ -70,7 +70,7 @@ fn diff_sequences_test_edit(
         path.push(item);
     }
 
-    let concat = |item: DiffPathItem| {
+    let concat = |item: &DiffPathItem| {
         let kind = item.kind();
         let (toks, start) = if kind != Added {
             (&toks_a, item.start_removed())
@@ -84,9 +84,9 @@ fn diff_sequences_test_edit(
         (result, kind)
     };
 
-    let output = mk_vec(&mut path.iter().cloned().map(concat));
-    let output_added = mk_vec(path_added.iter().cloned().map(concat));
-    let output_removed = mk_vec(path_removed.iter().cloned().map(concat));
+    let output = mk_vec(&mut path.iter().map(concat));
+    let output_added = mk_vec(path_added.iter().map(concat));
+    let output_removed = mk_vec(path_removed.iter().map(concat));
 
     let output_added = compress_path(&output_added);
     let output_removed = compress_path(&output_removed);
@@ -165,14 +165,26 @@ fn skip_token_test() {
 fn diff_sequences_test_1() {
     diff_sequences_test_edit(
         &[
-            (b"cb", Added),
-            (b"ab", Keep),
-            (b"a", Added),
+            (b"ab", Removed),
             (b"c", Keep),
-            (b"abba", Removed),
+            (b"b", Added),
+            (b"ab", Keep),
+            (b"b", Removed),
+            (b"a", Keep),
+            (b"c", Added),
         ],
-        &[(b"cb", Added), (b"ab", Keep), (b"a", Added), (b"c", Keep)],
-        &[(b"abc", Keep), (b"abba", Removed)],
+        &[
+            (b"c", Keep),
+            (b"b", Added),
+            (b"aba", Keep),
+            (b"c", Added),
+        ],
+        &[
+            (b"ab", Removed),
+            (b"cab", Keep),
+            (b"b", Removed),
+            (b"a", Keep),
+        ],
         b"abcabba",
         b"cbabac",
     )
