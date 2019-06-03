@@ -56,6 +56,7 @@ fn main() -> io::Result<()> {
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
     let mut hunk_buffer = HunkBuffer::new();
+    let mut v_buffer = vec![];
     let mut stdin = mk_reader(&stdin);
     let mut stdout = stdout.lock();
 
@@ -84,7 +85,7 @@ fn main() -> io::Result<()> {
             Some(b'-') => hunk_buffer.push_removed(&buffer),
             _ => {
                 let start = std::time::SystemTime::now();
-                hunk_buffer.process(&mut stdout)?;
+                hunk_buffer.process(&mut v_buffer, &mut stdout)?;
                 hunk_buffer.clear();
                 write!(stdout, "{}", String::from_utf8_lossy(&buffer))?;
                 time_computing_diff_ms += start.elapsed().unwrap().as_millis();
@@ -95,7 +96,7 @@ fn main() -> io::Result<()> {
     }
 
     // flush remaining hunk
-    hunk_buffer.process(&mut stdout)?;
+    hunk_buffer.process(&mut v_buffer, &mut stdout)?;
     eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
     eprintln!(
         "total processing time (ms): {}",
@@ -175,7 +176,7 @@ impl HunkBuffer {
         &self.added_lines
     }
 
-    fn process<Stream>(&self, out: &mut Stream) -> io::Result<()>
+    fn process<Stream>(&self, v: &mut Vec<usize>, out: &mut Stream) -> io::Result<()>
     where
         Stream: termcolor::WriteColor,
     {
@@ -185,7 +186,8 @@ impl HunkBuffer {
         //      .map(|buf| String::from_utf8_lossy(buf))
         //      .collect::<Vec<_>>());
 
-        let _diff = diff_sequences(&removed_words, &added_words);
+        let input = DiffInput::new(&removed_words, &added_words);
+        let _diff = diff_sequences_simple(&input, v);
 
         output(self.removed_lines(), Some(Red), out)?;
         output(self.added_lines(), Some(Green), out)?;
@@ -217,10 +219,6 @@ type Point = (usize, usize);
 #[derive(Clone, Debug)]
 struct Diff {
     points: Vec<Point>,
-}
-
-fn last<T>(slice: &[T]) -> Option<&T> {
-    slice.iter().next_back()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -293,25 +291,6 @@ impl Diff {
         Diff { points }
     }
 
-    fn empty() -> Diff {
-        Diff::new(vec![])
-    }
-
-    fn last_point(&self) -> &(usize, usize) {
-        last(&self.points).unwrap_or(&(0, 0))
-    }
-
-    fn push(&mut self, x: usize, y: usize) {
-        let mut it = self.points.iter_mut();
-        let z2 = (x, y);
-        let z1 = it.next_back();
-        let z0 = it.next_back();
-        match (z0, z1) {
-            (Some(ref z0), Some(ref mut z1)) if aligned(z0, z1, &z2) => **z1 = z2,
-            _ => self.points.push(z2),
-        }
-    }
-
     fn path(&self) -> Path {
         return Path::new(&self);
     }
@@ -326,50 +305,80 @@ fn aligned(z0: &Point, z1: &Point, z2: &Point) -> bool {
     v01.0 * v02.1 == v01.1 * v02.0
 }
 
-fn diff_sequences(seq_a: &[&[u8]], seq_b: &[&[u8]]) -> Diff {
-    let n = seq_a.len();
-    let m = seq_b.len();
-    let max = (n + m) as i64;
-    let mut v = vec![Diff::empty(); max as usize * 2 + 1];
-    let convert_index = |index| {
-        assert!(-max <= index);
-        assert!(index <= max);
-        (index + max) as usize
-    };
-    for d in 0..max {
-        for k in (-d..=d).step_by(2) {
-            assert_eq!((k - d) % 2, 0);
-            let mut path = {
-                let vkp1: &Diff = &v[convert_index(k + 1)];
-                if k == -d {
-                    vkp1.clone()
-                } else {
-                    let vkm1 = &v[convert_index(k - 1)];
-                    if k != d && vkm1.last_point().0 < vkp1.last_point().0 {
-                        vkp1.clone()
-                    } else {
-                        let mut res = vkm1.clone();
-                        let last_point = res.last_point();
-                        res.push(last_point.0 + 1, last_point.1);
-                        res
-                    }
-                }
-            };
-            let mut x = path.last_point().0;
-            let mut y = (x as i64 - k) as usize;
-            path.push(x, y);
-            while x < n && y < m && seq_a[x] == seq_b[y] {
-                x += 1;
-                y += 1;
-            }
-            path.push(x, y);
-            v[convert_index(k)] = path;
-            if n <= x && m <= y {
-                return v[convert_index(k)].clone();
-            }
+struct DiffInput<'a> {
+    seq_a: &'a [&'a [u8]],
+    seq_b: &'a [&'a [u8]],
+}
+
+impl<'a> DiffInput<'a> {
+    fn n(&self) -> usize {
+        self.seq_a.len()
+    }
+
+    fn m(&self) -> usize {
+        self.seq_b.len()
+    }
+
+    fn max_result(&self) -> usize {
+        self.n() + self.m()
+    }
+
+    fn new(seq_a: &'a [&'a [u8]], seq_b: &'a [&'a [u8]]) -> Self {
+        DiffInput { seq_a, seq_b }
+    }
+}
+
+struct DiffTraversal<'a>(&'a mut [usize], usize);
+
+impl<'a> DiffTraversal<'a> {
+    fn new(input: &'a DiffInput<'a>, v: &'a mut Vec<usize>) -> Self {
+        let max = input.n() + input.m();
+        v.resize(max * 2 + 1, 0);
+        let mut res = DiffTraversal(v, max);
+        *res.v_mut(1) = 0;
+        res
+    }
+
+    fn v(&self, index: isize) -> usize {
+        self.0[(index + self.1 as isize) as usize]
+    }
+
+    fn v_mut(&mut self, index: isize) -> &mut usize {
+        &mut self.0[(index + self.1 as isize) as usize]
+    }
+}
+
+fn diff_sequences_kernel(input: &DiffInput, ctx: &mut DiffTraversal, d: usize) -> Option<usize> {
+    let n = input.n();
+    let m = input.m();
+    assert!(d < ctx.1);
+    let d = d as isize;
+    for k in (-d..=d).step_by(2) {
+        let mut dx = if k == -d || k != d && ctx.v(k - 1) < ctx.v(k + 1) {
+            ctx.v(k + 1)
+        } else {
+            ctx.v(k - 1) + 1
+        };
+        let mut dy = (dx as isize - k) as usize;
+        while dx < n && dy < m && input.seq_a[dx] == input.seq_b[dy] {
+            dx += 1;
+            dy += 1;
+        }
+        *ctx.v_mut(k) = dx;
+        if n <= dx && m <= dy {
+            return Some(d as usize);
         }
     }
-    Diff::new(vec![(0, 0), (0, m), (n, m)])
+    None
+}
+
+fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<usize>) -> usize {
+    let ctx = &mut DiffTraversal::new(input, v);
+    let max_result = input.max_result();
+    (0..max_result)
+        .filter_map(|d| diff_sequences_kernel(input, ctx, d))
+        .next()
+        .unwrap_or(max_result)
 }
 
 fn is_alphanum(b: u8) -> bool {

@@ -40,10 +40,10 @@ fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> 
     result
 }
 
-fn diff_sequences_test_edit(
+fn diff_sequences_test(
     expected: &[(&[u8], DiffKind)],
-    expected_added: &[(&[u8], DiffKind)],
-    expected_removed: &[(&[u8], DiffKind)],
+    _expected_added: &[(&[u8], DiffKind)],
+    _expected_removed: &[(&[u8], DiffKind)],
     seq_a: &[u8],
     seq_b: &[u8],
 ) {
@@ -54,21 +54,24 @@ fn diff_sequences_test_edit(
     let toks_a = mk_tokens(seq_a);
     let toks_b = mk_tokens(seq_b);
 
-    let diff = &diff_sequences(&toks_a, &toks_b);
-    let mut path = vec![];
-    let mut path_added = vec![];
-    let mut path_removed = vec![];
+    let mut v = vec![];
+    let input = DiffInput::new(&toks_a, &toks_b);
+    let diff = diff_sequences_simple(&input, &mut v);
 
-    for item in diff.path() {
-        let kind = item.kind();
-        if kind != Added {
-            path_removed.push(item);
-        }
-        if kind != Removed {
-            path_added.push(item);
-        }
-        path.push(item);
-    }
+    let /*mut*/ path = vec![];
+    let /*mut*/ path_added = vec![];
+    let /*mut*/ path_removed = vec![];
+
+    // for item in diff.path() {
+    //     let kind = item.kind();
+    //     if kind != Added {
+    //         path_removed.push(item);
+    //     }
+    //     if kind != Removed {
+    //         path_added.push(item);
+    //     }
+    //     path.push(item);
+    // }
 
     let concat = |item: &DiffPathItem| {
         let kind = item.kind();
@@ -91,13 +94,23 @@ fn diff_sequences_test_edit(
     let output_added = compress_path(&output_added);
     let output_removed = compress_path(&output_removed);
 
-    let output = mk_vec(output.iter().map(|(vec, c)| (&vec[..], c.clone())));
-    let output_added = mk_vec(output_added.iter().map(|(vec, c)| (&vec[..], c.clone())));
-    let output_removed = mk_vec(output_removed.iter().map(|(vec, c)| (&vec[..], c.clone())));
+    let _output = mk_vec(output.iter().map(|(vec, c)| (&vec[..], c.clone())));
+    let _output_added = mk_vec(output_added.iter().map(|(vec, c)| (&vec[..], c.clone())));
+    let _output_removed = mk_vec(output_removed.iter().map(|(vec, c)| (&vec[..], c.clone())));
 
-    assert_eq!(expected, &output[..]);
-    assert_eq!(expected_added, &output_added[..]);
-    assert_eq!(expected_removed, &output_removed[..]);
+    // assert_eq!(expected, &output[..]);
+    // assert_eq!(expected_added, &output_added[..]);
+    // assert_eq!(expected_removed, &output_removed[..]);
+
+    let d = expected
+        .iter()
+        .map(|(buf, kind)| match kind {
+            Added | Removed => buf.len(),
+            Keep => 0,
+        })
+        .fold(0, |acc, len| acc + len);
+
+    assert_eq!(d, diff);
 }
 
 #[test]
@@ -163,7 +176,7 @@ fn skip_token_test() {
 
 #[test]
 fn diff_sequences_test_1() {
-    diff_sequences_test_edit(
+    diff_sequences_test(
         &[
             (b"ab", Removed),
             (b"c", Keep),
@@ -173,12 +186,7 @@ fn diff_sequences_test_1() {
             (b"a", Keep),
             (b"c", Added),
         ],
-        &[
-            (b"c", Keep),
-            (b"b", Added),
-            (b"aba", Keep),
-            (b"c", Added),
-        ],
+        &[(b"c", Keep), (b"b", Added), (b"aba", Keep), (b"c", Added)],
         &[
             (b"ab", Removed),
             (b"cab", Keep),
@@ -192,7 +200,7 @@ fn diff_sequences_test_1() {
 
 #[test]
 fn diff_sequences_test_2() {
-    diff_sequences_test_edit(
+    diff_sequences_test(
         &[
             (b"x", Added),
             (b"a", Keep),
@@ -218,7 +226,7 @@ fn diff_sequences_test_2() {
 
 #[test]
 fn diff_sequences_test_3() {
-    diff_sequences_test_edit(
+    diff_sequences_test(
         &[(b"defgh", Added), (b"abc", Removed)],
         &[(b"defgh", Added)],
         &[(b"abc", Removed)],
