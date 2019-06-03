@@ -50,9 +50,11 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
 
     let mut v = vec![];
     let input = DiffInput::new(&toks_a, &toks_b);
-    let diff = diff_sequences_simple(&input, &mut v);
+    let diff = diff_sequences_simple(&input, &mut v, true);
+    let diff_bwd = diff_sequences_simple(&input, &mut v, false);
     let input_r = DiffInput::new(&toks_b, &toks_a);
-    let diff_r = diff_sequences_simple(&input_r, &mut v);
+    let diff_r = diff_sequences_simple(&input_r, &mut v, true);
+    let diff_r_bwd = diff_sequences_simple(&input_r, &mut v, false);
 
     let /*mut*/ path = vec![];
     let /*mut*/ path_added = vec![];
@@ -108,6 +110,8 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
 
     assert_eq!(d, diff);
     assert_eq!(d, diff_r);
+    assert_eq!(d, diff_bwd);
+    assert_eq!(d, diff_r_bwd);
 }
 
 #[test]

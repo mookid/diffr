@@ -176,7 +176,7 @@ impl HunkBuffer {
         &self.added_lines
     }
 
-    fn process<Stream>(&self, v: &mut Vec<usize>, out: &mut Stream) -> io::Result<()>
+    fn process<Stream>(&self, v: &mut Vec<isize>, out: &mut Stream) -> io::Result<()>
     where
         Stream: termcolor::WriteColor,
     {
@@ -187,7 +187,7 @@ impl HunkBuffer {
         //      .collect::<Vec<_>>());
 
         let input = DiffInput::new(&removed_words, &added_words);
-        let _diff = diff_sequences_simple(&input, v);
+        let _diff = diff_sequences_simple(&input, v, true);
 
         output(self.removed_lines(), Some(Red), out)?;
         output(self.added_lines(), Some(Green), out)?;
@@ -326,56 +326,78 @@ impl<'a> DiffInput<'a> {
     fn new(seq_a: &'a [&'a [u8]], seq_b: &'a [&'a [u8]]) -> Self {
         DiffInput { seq_a, seq_b }
     }
+
+    fn seq_a(&self, index: isize) -> &[u8] {
+        assert!(0 <= index);
+        self.seq_a[index as usize]
+    }
+
+    fn seq_b(&self, index: isize) -> &[u8] {
+        assert!(0 <= index);
+        self.seq_b[index as usize]
+    }
 }
 
-struct DiffTraversal<'a>(&'a mut [usize], usize);
+struct DiffTraversal<'a> {
+    v: &'a mut [isize],
+    max: usize,
+    forward: bool,
+}
 
 impl<'a> DiffTraversal<'a> {
-    fn new(input: &'a DiffInput<'a>, v: &'a mut Vec<usize>) -> Self {
-        let max = input.n() + input.m();
+    fn new(input: &'a DiffInput<'a>, v: &'a mut Vec<isize>, forward: bool) -> Self {
+        let n = input.n();
+        let m = input.m();
+        let max = n + m;
         v.resize(max * 2 + 1, 0);
-        let mut res = DiffTraversal(v, max);
+        let mut res = DiffTraversal { v, max, forward };
         if max != 0 {
             *res.v_mut(1) = 0;
         }
         res
     }
 
-    fn v(&self, index: isize) -> usize {
-        self.0[(index + self.1 as isize) as usize]
+    fn v(&self, index: isize) -> isize {
+        self.v[(index + self.max as isize) as usize]
     }
 
-    fn v_mut(&mut self, index: isize) -> &mut usize {
-        &mut self.0[(index + self.1 as isize) as usize]
+    fn v_mut(&mut self, index: isize) -> &mut isize {
+        &mut self.v[(index + self.max as isize) as usize]
     }
 }
 
 fn diff_sequences_kernel(input: &DiffInput, ctx: &mut DiffTraversal, d: usize) -> Option<usize> {
-    let n = input.n();
-    let m = input.m();
-    assert!(d < ctx.1);
+    let n = input.n() as isize;
+    let m = input.m() as isize;
+    assert!(d < ctx.max);
     let d = d as isize;
+    let target = (n, m);
+    let (dir, ofs_a, ofs_b) = if ctx.forward {
+        (1, 0, 0)
+    } else {
+        (-1, n - 1, m - 1)
+    };
     for k in (-d..=d).step_by(2) {
         let mut dx = if k == -d || k != d && ctx.v(k - 1) < ctx.v(k + 1) {
             ctx.v(k + 1)
         } else {
             ctx.v(k - 1) + 1
         };
-        let mut dy = (dx as isize - k) as usize;
-        while dx < n && dy < m && input.seq_a[dx] == input.seq_b[dy] {
+        let mut dy = dx - k;
+        while dx < n && dy < m && input.seq_a(dir * dx + ofs_a) == input.seq_b(dir * dy + ofs_b) {
             dx += 1;
             dy += 1;
         }
         *ctx.v_mut(k) = dx;
-        if n <= dx && m <= dy {
+        if target == (dx, dy) {
             return Some(d as usize);
         }
     }
     None
 }
 
-fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<usize>) -> usize {
-    let ctx = &mut DiffTraversal::new(input, v);
+fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<isize>, forward: bool) -> usize {
+    let ctx = &mut DiffTraversal::new(input, v, forward);
     let max_result = input.max_result();
     (0..max_result)
         .filter_map(|d| diff_sequences_kernel(input, ctx, d))
