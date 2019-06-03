@@ -342,17 +342,28 @@ struct DiffTraversal<'a> {
     v: &'a mut [isize],
     max: usize,
     forward: bool,
+    end: (isize, isize),
 }
 
 impl<'a> DiffTraversal<'a> {
     fn new(input: &'a DiffInput<'a>, v: &'a mut Vec<isize>, forward: bool) -> Self {
-        let n = input.n();
-        let m = input.m();
-        let max = n + m;
+        let n = input.n() as isize;
+        let m = input.m() as isize;
+        let max = (n + m) as usize;
         v.resize(max * 2 + 1, 0);
-        let mut res = DiffTraversal { v, max, forward };
+        let (start, end) = if forward {
+            ((0, 0), (n, m))
+        } else {
+            ((n, m), (0, 0))
+        };
+        let mut res = DiffTraversal {
+            v,
+            max,
+            forward,
+            end,
+        };
         if max != 0 {
-            *res.v_mut(1) = 0;
+            *res.v_mut(1) = start.0
         }
         res
     }
@@ -367,29 +378,64 @@ impl<'a> DiffTraversal<'a> {
 }
 
 fn diff_sequences_kernel(input: &DiffInput, ctx: &mut DiffTraversal, d: usize) -> Option<usize> {
+    if ctx.forward {
+        diff_sequences_kernel_forward(input, ctx, d)
+    } else {
+        diff_sequences_kernel_backward(input, ctx, d)
+    }
+}
+
+fn diff_sequences_kernel_forward(
+    input: &DiffInput,
+    ctx: &mut DiffTraversal,
+    d: usize,
+) -> Option<usize> {
     let n = input.n() as isize;
     let m = input.m() as isize;
     assert!(d < ctx.max);
     let d = d as isize;
-    let target = (n, m);
-    let (dir, ofs_a, ofs_b) = if ctx.forward {
-        (1, 0, 0)
-    } else {
-        (-1, n - 1, m - 1)
-    };
     for k in (-d..=d).step_by(2) {
-        let mut dx = if k == -d || k != d && ctx.v(k - 1) < ctx.v(k + 1) {
+        let mut x = if k == -d || k != d && ctx.v(k - 1) < ctx.v(k + 1) {
             ctx.v(k + 1)
         } else {
             ctx.v(k - 1) + 1
         };
-        let mut dy = dx - k;
-        while dx < n && dy < m && input.seq_a(dir * dx + ofs_a) == input.seq_b(dir * dy + ofs_b) {
-            dx += 1;
-            dy += 1;
+        let mut y = x - k;
+        while x < n && y < m && input.seq_a(x) == input.seq_b(y) {
+            x += 1;
+            y += 1;
         }
-        *ctx.v_mut(k) = dx;
-        if target == (dx, dy) {
+        *ctx.v_mut(k) = x;
+        if ctx.end == (x, y) {
+            return Some(d as usize);
+        }
+    }
+    None
+}
+
+fn diff_sequences_kernel_backward(
+    input: &DiffInput,
+    ctx: &mut DiffTraversal,
+    d: usize,
+) -> Option<usize> {
+    let n = input.n() as isize;
+    let m = input.m() as isize;
+    let delta = n - m;
+    assert!(d < ctx.max);
+    let d = d as isize;
+    for k in (-d..=d).step_by(2) {
+        let mut x = if k == -d || k != d && ctx.v(k + 1) < ctx.v(k - 1) {
+            ctx.v(k + 1)
+        } else {
+            ctx.v(k - 1) + 1
+        };
+        let mut y = x - (k + delta);
+        while 0 < x && 0 < y && input.seq_a(x - 1) == input.seq_b(y - 1) {
+            x -= 1;
+            y -= 1;
+        }
+        *ctx.v_mut(k) = x - 1;
+        if ctx.end == (x, y) {
             return Some(d as usize);
         }
     }
