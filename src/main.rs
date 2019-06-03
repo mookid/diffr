@@ -335,7 +335,9 @@ impl<'a> DiffTraversal<'a> {
         let max = input.n() + input.m();
         v.resize(max * 2 + 1, 0);
         let mut res = DiffTraversal(v, max);
-        *res.v_mut(1) = 0;
+        if max != 0 {
+            *res.v_mut(1) = 0;
+        }
         res
     }
 

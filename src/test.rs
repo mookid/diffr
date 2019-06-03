@@ -40,13 +40,7 @@ fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> 
     result
 }
 
-fn diff_sequences_test(
-    expected: &[(&[u8], DiffKind)],
-    _expected_added: &[(&[u8], DiffKind)],
-    _expected_removed: &[(&[u8], DiffKind)],
-    seq_a: &[u8],
-    seq_b: &[u8],
-) {
+fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8]) {
     fn mk_tokens(buf: &[u8]) -> Vec<&[u8]> {
         (0..buf.len()).map(|i| &buf[i..i + 1]).collect()
     };
@@ -57,6 +51,8 @@ fn diff_sequences_test(
     let mut v = vec![];
     let input = DiffInput::new(&toks_a, &toks_b);
     let diff = diff_sequences_simple(&input, &mut v);
+    let input_r = DiffInput::new(&toks_b, &toks_a);
+    let diff_r = diff_sequences_simple(&input_r, &mut v);
 
     let /*mut*/ path = vec![];
     let /*mut*/ path_added = vec![];
@@ -111,6 +107,7 @@ fn diff_sequences_test(
         .fold(0, |acc, len| acc + len);
 
     assert_eq!(d, diff);
+    assert_eq!(d, diff_r);
 }
 
 #[test]
@@ -186,13 +183,6 @@ fn diff_sequences_test_1() {
             (b"a", Keep),
             (b"c", Added),
         ],
-        &[(b"c", Keep), (b"b", Added), (b"aba", Keep), (b"c", Added)],
-        &[
-            (b"ab", Removed),
-            (b"cab", Keep),
-            (b"b", Removed),
-            (b"a", Keep),
-        ],
         b"abcabba",
         b"cbabac",
     )
@@ -210,15 +200,6 @@ fn diff_sequences_test_2() {
             (b"c", Keep),
             (b"y", Removed),
         ],
-        &[
-            (b"x", Added),
-            (b"a", Keep),
-            (b"x", Added),
-            (b"b", Keep),
-            (b"xab", Added),
-            (b"c", Keep),
-        ],
-        &[(b"abc", Keep), (b"y", Removed)],
         b"abcy",
         b"xaxbxabc",
     )
@@ -226,13 +207,35 @@ fn diff_sequences_test_2() {
 
 #[test]
 fn diff_sequences_test_3() {
+    diff_sequences_test(&[(b"defgh", Added), (b"abc", Removed)], b"abc", b"defgh")
+}
+
+#[test]
+fn diff_sequences_test_4() {
     diff_sequences_test(
-        &[(b"defgh", Added), (b"abc", Removed)],
-        &[(b"defgh", Added)],
-        &[(b"abc", Removed)],
-        b"abc",
-        b"defgh",
+        &[(b"defg", Added), (b"abc", Removed), (b"zzz", Keep)],
+        b"abczzz",
+        b"defgzzz",
     )
+}
+
+#[test]
+fn diff_sequences_test_5() {
+    diff_sequences_test(
+        &[(b"zzz", Keep), (b"defg", Added), (b"abcd", Removed)],
+        b"zzzabcd",
+        b"zzzefgh",
+    )
+}
+
+#[test]
+fn diff_sequences_test_6() {
+    diff_sequences_test(&[(b"abcd", Added)], b"", b"abcd")
+}
+
+#[test]
+fn diff_sequences_test_7() {
+    diff_sequences_test(&[], b"", b"")
 }
 
 #[test]
