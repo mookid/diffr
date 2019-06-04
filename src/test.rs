@@ -52,9 +52,11 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     let input = DiffInput::new(&toks_a, &toks_b);
     let diff = diff_sequences_simple(&input, &mut v, true);
     let diff_bwd = diff_sequences_simple(&input, &mut v, false);
+    let diff_bidi = diff_sequences_bidirectional(&input, &mut v);
     let input_r = DiffInput::new(&toks_b, &toks_a);
     let diff_r = diff_sequences_simple(&input_r, &mut v, true);
     let diff_r_bwd = diff_sequences_simple(&input_r, &mut v, false);
+    let diff_r_bidi = diff_sequences_bidirectional(&input_r, &mut v);
 
     let /*mut*/ path = vec![];
     let /*mut*/ path_added = vec![];
@@ -112,6 +114,17 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     assert_eq!(d, diff_r);
     assert_eq!(d, diff_bwd);
     assert_eq!(d, diff_r_bwd);
+    assert_eq!(d, diff_bidi.d);
+    assert_eq!(d, diff_r_bidi.d);
+
+    for (snake, input) in &[(&diff_bidi, &input), (&diff_r_bidi, &input_r)] {
+        let Snake { x0, x1, y0, y1, .. } = snake;
+        assert_eq!(x0 - x1, y0 - y1);
+        assert_eq!(
+            mk_vec((*x0..*x1).map(|x| input.seq_a(x))),
+            mk_vec((*y0..*y1).map(|y| input.seq_b(y))),
+        );
+    }
 }
 
 #[test]

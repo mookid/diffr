@@ -187,7 +187,7 @@ impl HunkBuffer {
         //      .collect::<Vec<_>>());
 
         let input = DiffInput::new(&removed_words, &added_words);
-        let _diff = diff_sequences_simple(&input, v, true);
+        let _diff = diff_sequences_bidirectional(&input, v);
 
         output(self.removed_lines(), Some(Red), out)?;
         output(self.added_lines(), Some(Green), out)?;
@@ -319,10 +319,6 @@ impl<'a> DiffInput<'a> {
         self.seq_b.len()
     }
 
-    fn max_result(&self) -> usize {
-        self.n() + self.m()
-    }
-
     fn new(seq_a: &'a [&'a [u8]], seq_b: &'a [&'a [u8]]) -> Self {
         DiffInput { seq_a, seq_b }
     }
@@ -346,11 +342,10 @@ struct DiffTraversal<'a> {
 }
 
 impl<'a> DiffTraversal<'a> {
-    fn new(input: &'a DiffInput<'a>, v: &'a mut Vec<isize>, forward: bool) -> Self {
+    fn from_slice(input: &'a DiffInput<'a>, v: &'a mut [isize], forward: bool, max: usize) -> Self {
         let n = input.n() as isize;
         let m = input.m() as isize;
-        let max = (n + m) as usize;
-        v.resize(max * 2 + 1, 0);
+        assert!(max * 2 + 1 <= v.len());
         let (start, end) = if forward {
             ((0, 0), (n, m))
         } else {
@@ -366,6 +361,16 @@ impl<'a> DiffTraversal<'a> {
             *res.v_mut(1) = start.0
         }
         res
+    }
+
+    fn from_vector(
+        input: &'a DiffInput<'a>,
+        v: &'a mut Vec<isize>,
+        forward: bool,
+        max: usize,
+    ) -> Self {
+        v.resize(max * 2 + 1, 0);
+        Self::from_slice(input, v, forward, max)
     }
 
     fn v(&self, index: isize) -> isize {
@@ -442,13 +447,110 @@ fn diff_sequences_kernel_backward(
     None
 }
 
+struct Snake {
+    x0: isize,
+    x1: isize,
+    y0: isize,
+    y1: isize,
+    d: usize,
+}
+
+impl Snake {
+    fn fail(n: usize, m: usize) -> Self {
+        Snake {
+            x0: 0,
+            y0: 0,
+            x1: 0,
+            y1: 0,
+            d: n + m,
+        }
+    }
+}
+
+fn diff_sequences_kernel_bidirectional(
+    input: &DiffInput,
+    ctx_fwd: &mut DiffTraversal,
+    ctx_bwd: &mut DiffTraversal,
+    d: usize,
+) -> Option<Snake> {
+    let n = input.n() as isize;
+    let m = input.m() as isize;
+    let delta = n - m;
+    let odd = delta % 2 != 0;
+    assert!(d < ctx_fwd.max);
+    assert!(d < ctx_bwd.max);
+    let d = d as isize;
+    for k in (-d..=d).step_by(2) {
+        let mut x = if k == -d || k != d && ctx_fwd.v(k - 1) < ctx_fwd.v(k + 1) {
+            ctx_fwd.v(k + 1)
+        } else {
+            ctx_fwd.v(k - 1) + 1
+        };
+        let mut y = x - k;
+        let (x0, y0) = (x, y);
+        while x < n && y < m && input.seq_a(x) == input.seq_b(y) {
+            x += 1;
+            y += 1;
+        }
+        if odd && (k - delta).abs() <= d - 1 && x > ctx_bwd.v(k - delta) {
+            let d = 2 * d as usize - 1;
+            return Some(Snake {
+                x0,
+                y0,
+                x1: x,
+                y1: y,
+                d,
+            });
+        }
+        *ctx_fwd.v_mut(k) = x;
+    }
+    for k in (-d..=d).step_by(2) {
+        let mut x = if k == -d || k != d && ctx_bwd.v(k + 1) < ctx_bwd.v(k - 1) {
+            ctx_bwd.v(k + 1)
+        } else {
+            ctx_bwd.v(k - 1) + 1
+        };
+        let mut y = x - (k + delta);
+        let (x1, y1) = (x, y);
+        while 0 < x && 0 < y && input.seq_a(x - 1) == input.seq_b(y - 1) {
+            x -= 1;
+            y -= 1;
+        }
+        if !odd && (k + delta).abs() <= d && x - 1 < ctx_fwd.v(k + delta) {
+            let d = 2 * d as usize;
+            return Some(Snake {
+                x0: x,
+                y0: y,
+                x1,
+                y1,
+                d,
+            });
+        }
+        *ctx_bwd.v_mut(k) = x - 1;
+    }
+    None
+}
+
 fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<isize>, forward: bool) -> usize {
-    let ctx = &mut DiffTraversal::new(input, v, forward);
-    let max_result = input.max_result();
+    let max_result = input.n() + input.m();
+    let ctx = &mut DiffTraversal::from_vector(input, v, forward, max_result);
     (0..max_result)
         .filter_map(|d| diff_sequences_kernel(input, ctx, d))
         .next()
         .unwrap_or(max_result)
+}
+
+fn diff_sequences_bidirectional(input: &DiffInput, v: &mut Vec<isize>) -> Snake {
+    let max = (input.n() + input.m() + 1) / 2;
+    let iter_len = 2 * max + 1;
+    v.resize(2 * iter_len, 0);
+    let (v1, v2) = v.split_at_mut(iter_len);
+    let ctx_fwd = &mut DiffTraversal::from_slice(input, v1, true, max);
+    let ctx_bwd = &mut DiffTraversal::from_slice(input, v2, false, max);
+    (0..max)
+        .filter_map(|d| diff_sequences_kernel_bidirectional(input, ctx_fwd, ctx_bwd, d))
+        .next()
+        .unwrap_or_else(|| Snake::fail(input.n(), input.m()))
 }
 
 fn is_alphanum(b: u8) -> bool {
