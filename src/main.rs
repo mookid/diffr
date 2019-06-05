@@ -1,20 +1,10 @@
 use crate::DiffKind::*;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader};
 use termcolor::{
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream,
 };
-
-trait Reader {
-    fn next_line(&mut self, buffer: &mut Vec<u8>) -> io::Result<usize>;
-}
-
-impl<'a> Reader for BufRead {
-    fn next_line(&mut self, buffer: &mut Vec<u8>) -> io::Result<usize> {
-        self.read_until(b'\n', buffer)
-    }
-}
 
 fn usage() -> ! {
     eprintln!("usage:");
@@ -69,7 +59,7 @@ fn main() -> io::Result<()> {
         if buffer.is_empty() || starts_hunk(&buffer) {
             break;
         }
-        write!(stdout, "{}", String::from_utf8_lossy(&buffer))?;
+        output(&buffer, None, &mut stdout)?;
         buffer.clear();
     }
 
@@ -87,11 +77,10 @@ fn main() -> io::Result<()> {
                 let start = std::time::SystemTime::now();
                 hunk_buffer.process(&mut v_buffer, &mut stdout)?;
                 hunk_buffer.clear();
-                write!(stdout, "{}", String::from_utf8_lossy(&buffer))?;
+                output(&buffer, None, &mut stdout)?;
                 time_computing_diff_ms += start.elapsed().unwrap().as_millis();
             }
         }
-        // dbg!(&String::from_utf8_lossy(&buffer));
         buffer.clear();
     }
 
@@ -182,9 +171,6 @@ impl HunkBuffer {
     {
         let removed_words = tokenize(self.removed_lines());
         let added_words = tokenize(self.added_lines());
-        // dbg!(added_words
-        //      .map(|buf| String::from_utf8_lossy(buf))
-        //      .collect::<Vec<_>>());
 
         let input = DiffInput::new(&removed_words, &added_words);
         let _diff = diff_sequences_bidirectional(&input, v);
@@ -571,10 +557,10 @@ where
     } else {
         buf
     };
-    write!(out, "{}", String::from_utf8_lossy(buf))?;
+    out.write(buf)?;
     out.reset()?;
     if whole_line {
-        write!(out, "\n")?;
+        out.write(b"\n")?;
     }
     Ok(())
 }
