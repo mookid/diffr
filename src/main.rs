@@ -84,6 +84,7 @@ fn main() -> io::Result<()> {
         buffer.clear();
     }
 
+
     // flush remaining hunk
     hunk_buffer.process(&mut v_buffer, &mut stdout)?;
     eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
