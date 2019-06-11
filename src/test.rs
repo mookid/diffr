@@ -4,8 +4,12 @@ fn string_of_bytes(buf: &[u8]) -> String {
     String::from_utf8_lossy(buf).into()
 }
 
-fn to_strings(buf: &[&[u8]]) -> Vec<String> {
-    mk_vec(buf.iter().map(|buf| string_of_bytes(buf)))
+fn to_strings(buf: &[u8], tokens: &[(usize, usize)]) -> Vec<String> {
+    mk_vec(
+        tokens
+            .iter()
+            .map(|range| string_of_bytes(&buf[range.0..range.1])),
+    )
 }
 
 fn mk_vec<It, T>(it: It) -> Vec<T>
@@ -40,20 +44,43 @@ fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> 
     result
 }
 
+fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<(usize, usize)> {
+    let mut toks = vec![];
+    for i in 0..data.len() {
+        toks.push((i, i + 1));
+    }
+    toks
+}
+
 fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8]) {
-    fn mk_tokens(buf: &[u8]) -> Vec<&[u8]> {
-        (0..buf.len()).map(|i| &buf[i..i + 1]).collect()
+    let toks_a = dummy_tokenize(&seq_a);
+    let toks_b = dummy_tokenize(&seq_b);
+    let input = Tokens {
+        added: Tokenization {
+            data: &seq_b,
+            tokens: &toks_b,
+        },
+        removed: Tokenization {
+            data: &seq_a,
+            tokens: &toks_a,
+        },
+    };
+    let input_r = Tokens {
+        added: Tokenization {
+            data: &seq_a,
+            tokens: &toks_a,
+        },
+        removed: Tokenization {
+            data: &seq_b,
+            tokens: &toks_b,
+        },
     };
 
-    let toks_a = mk_tokens(seq_a);
-    let toks_b = mk_tokens(seq_b);
-
     let mut v = vec![];
-    let input = DiffInput::new(&toks_a, &toks_b);
+    dbg!(&input);
     let diff = diff_sequences_simple(&input, &mut v, true);
     let diff_bwd = diff_sequences_simple(&input, &mut v, false);
     let diff_bidi = diff_sequences_bidirectional(&input, &mut v);
-    let input_r = DiffInput::new(&toks_b, &toks_a);
     let diff_r = diff_sequences_simple(&input_r, &mut v, true);
     let diff_r_bwd = diff_sequences_simple(&input_r, &mut v, false);
     let diff_r_bidi = diff_sequences_bidirectional(&input_r, &mut v);
@@ -75,14 +102,14 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
 
     let concat = |item: &DiffPathItem| {
         let kind = item.kind();
-        let (toks, start) = if kind != Added {
-            (&toks_a, item.start_removed())
+        let tok = if kind != Added {
+            &input.removed
         } else {
-            (&toks_b, item.start_added())
+            &input.added
         };
         let mut result = vec![];
-        for buf in &toks[start..start + item.len()] {
-            result.extend_from_slice(buf)
+        for range in tok.tokens {
+            result.extend_from_slice(&tok.data[range.0..range.1])
         }
         (result, kind)
     };
@@ -274,16 +301,31 @@ fn aligned_test() {
 fn tokenize_test() {
     fn test(expected: &[&str], buf: &[u8]) {
         let tokens = tokenize(buf);
-        assert_eq!(buf.len(), tokens.iter().map(|buf| buf.len()).sum());
+        assert_eq!(
+            buf.len(),
+            tokens.iter().map(|range| range.1 - range.0).sum()
+        );
         for token in &tokens {
-            assert!(token.len() != 0)
+            assert!(token.0 < token.1)
         }
         assert_eq!(
             mk_vec(buf.iter()),
-            mk_vec(tokens.iter().flat_map(|buf| buf.iter()))
+            mk_vec(tokens.iter().flat_map(|range| &buf[range.0..range.1]))
         );
 
-        assert_eq!(expected, &to_strings(&tokens[..])[..]);
+        let foo = mk_vec(
+            tokens
+                .iter()
+                .map(|range| &buf[range.0..range.1])
+                .map(|buf| string_of_bytes(buf)),
+        );
+
+        let foo = mk_vec(foo.iter().map(|str| &**str));
+
+        assert_eq!(&*expected, &*foo);
+
+        // TODO
+        assert_eq!(expected, &to_strings(&buf, &tokens)[..]);
     }
     test(&[], b"");
     test(&[" "], b" ");

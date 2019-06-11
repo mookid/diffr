@@ -84,7 +84,6 @@ fn main() -> io::Result<()> {
         buffer.clear();
     }
 
-
     // flush remaining hunk
     hunk_buffer.process(&mut v_buffer, &mut stdout)?;
     eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
@@ -95,10 +94,13 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-struct HunkBuffer {
-    added_lines: Vec<u8>,
-    removed_lines: Vec<u8>,
+#[derive(Debug)]
+struct DiffPair<T> {
+    added: T,
+    removed: T,
 }
+
+type HunkBuffer = DiffPair<Vec<u8>>;
 
 // Scan buf looking for target, returning the index of its first
 // appearance.
@@ -140,63 +142,97 @@ fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
 impl HunkBuffer {
     fn new() -> Self {
         HunkBuffer {
-            added_lines: vec![],
-            removed_lines: vec![],
+            added: vec![],
+            removed: vec![],
         }
     }
 
     fn clear(&mut self) {
-        self.added_lines.clear();
-        self.removed_lines.clear();
+        self.added.clear();
+        self.removed.clear();
     }
 
     fn push_added(&mut self, line: &[u8]) {
-        add_raw_line(&mut self.added_lines, line)
+        add_raw_line(&mut self.added, line)
     }
 
     fn push_removed(&mut self, line: &[u8]) {
-        add_raw_line(&mut self.removed_lines, line)
-    }
-
-    fn removed_lines(&self) -> &[u8] {
-        &self.removed_lines
-    }
-
-    fn added_lines(&self) -> &[u8] {
-        &self.added_lines
+        add_raw_line(&mut self.removed, line)
     }
 
     fn process<Stream>(&self, v: &mut Vec<isize>, out: &mut Stream) -> io::Result<()>
     where
         Stream: termcolor::WriteColor,
     {
-        let removed_words = tokenize(self.removed_lines());
-        let added_words = tokenize(self.added_lines());
+        let removed_tokens = tokenize(&self.removed);
+        let added_tokens = tokenize(&self.added);
 
-        let input = DiffInput::new(&removed_words, &added_words);
-        let _diff = diff_sequences_bidirectional(&input, v);
+        let tokens = Tokens {
+            removed: Tokenization {
+                data: &self.removed,
+                tokens: &removed_tokens,
+            },
+            added: Tokenization {
+                data: &self.added,
+                tokens: &added_tokens,
+            },
+        };
 
-        output(self.removed_lines(), Some(Red), out)?;
-        output(self.added_lines(), Some(Green), out)?;
+        let _diff = diff_sequences_bidirectional(&tokens, v);
+
+        output(&self.removed, Some(Red), out)?;
+        output(&self.added, Some(Green), out)?;
         Ok(())
     }
 }
 
-fn tokenize(src: &[u8]) -> Vec<&[u8]> {
+#[derive(Debug)]
+struct Tokenization<'a> {
+    data: &'a [u8],
+    tokens: &'a [(usize, usize)],
+}
+
+type Tokens<'a> = DiffPair<Tokenization<'a>>;
+
+impl<'a> Tokens<'a> {
+    fn n(&self) -> usize {
+        self.removed.tokens.len()
+    }
+
+    fn m(&self) -> usize {
+        self.added.tokens.len()
+    }
+
+    fn seq_a(&self, index: isize) -> &[u8] {
+        Self::get_slice(&self.removed.data, &self.removed.tokens, index)
+    }
+
+    fn seq_b(&self, index: isize) -> &[u8] {
+        Self::get_slice(&self.added.data, &self.added.tokens, index)
+    }
+
+    fn get_slice<'t>(data: &'t [u8], tokens: &'t [(usize, usize)], index: isize) -> &'t [u8] {
+        assert!(0 <= index);
+        let range = tokens[index as usize];
+        &data[range.0..range.1]
+    }
+}
+
+fn tokenize(src: &[u8]) -> Vec<(usize, usize)> {
     let mut tokens = vec![];
     let mut lo = 0;
     let mut it = src.iter().clone().enumerate();
     while let Some((hi, b)) = it.next() {
         if !is_alphanum(*b) {
             if lo < hi {
-                tokens.push(&src[lo..hi]);
+                tokens.push((lo, hi));
             }
-            tokens.push(&src[hi..hi + 1]);
+            tokens.push((hi, hi + 1));
             lo = hi + 1
         }
     }
     if lo < src.len() {
-        tokens.push(&src[lo..src.len()]);
+        tokens.push((lo, src.len()));
     }
     tokens
 }
@@ -292,35 +328,6 @@ fn aligned(z0: &Point, z1: &Point, z2: &Point) -> bool {
     v01.0 * v02.1 == v01.1 * v02.0
 }
 
-struct DiffInput<'a> {
-    seq_a: &'a [&'a [u8]],
-    seq_b: &'a [&'a [u8]],
-}
-
-impl<'a> DiffInput<'a> {
-    fn n(&self) -> usize {
-        self.seq_a.len()
-    }
-
-    fn m(&self) -> usize {
-        self.seq_b.len()
-    }
-
-    fn new(seq_a: &'a [&'a [u8]], seq_b: &'a [&'a [u8]]) -> Self {
-        DiffInput { seq_a, seq_b }
-    }
-
-    fn seq_a(&self, index: isize) -> &[u8] {
-        assert!(0 <= index);
-        self.seq_a[index as usize]
-    }
-
-    fn seq_b(&self, index: isize) -> &[u8] {
-        assert!(0 <= index);
-        self.seq_b[index as usize]
-    }
-}
-
 struct DiffTraversal<'a> {
     v: &'a mut [isize],
     max: usize,
@@ -329,7 +336,7 @@ struct DiffTraversal<'a> {
 }
 
 impl<'a> DiffTraversal<'a> {
-    fn from_slice(input: &'a DiffInput<'a>, v: &'a mut [isize], forward: bool, max: usize) -> Self {
+    fn from_slice(input: &'a Tokens<'a>, v: &'a mut [isize], forward: bool, max: usize) -> Self {
         let n = input.n() as isize;
         let m = input.m() as isize;
         assert!(max * 2 + 1 <= v.len());
@@ -351,7 +358,7 @@ impl<'a> DiffTraversal<'a> {
     }
 
     fn from_vector(
-        input: &'a DiffInput<'a>,
+        input: &'a Tokens<'a>,
         v: &'a mut Vec<isize>,
         forward: bool,
         max: usize,
@@ -369,7 +376,7 @@ impl<'a> DiffTraversal<'a> {
     }
 }
 
-fn diff_sequences_kernel(input: &DiffInput, ctx: &mut DiffTraversal, d: usize) -> Option<usize> {
+fn diff_sequences_kernel(input: &Tokens, ctx: &mut DiffTraversal, d: usize) -> Option<usize> {
     if ctx.forward {
         diff_sequences_kernel_forward(input, ctx, d)
     } else {
@@ -378,7 +385,7 @@ fn diff_sequences_kernel(input: &DiffInput, ctx: &mut DiffTraversal, d: usize) -
 }
 
 fn diff_sequences_kernel_forward(
-    input: &DiffInput,
+    input: &Tokens,
     ctx: &mut DiffTraversal,
     d: usize,
 ) -> Option<usize> {
@@ -406,7 +413,7 @@ fn diff_sequences_kernel_forward(
 }
 
 fn diff_sequences_kernel_backward(
-    input: &DiffInput,
+    input: &Tokens,
     ctx: &mut DiffTraversal,
     d: usize,
 ) -> Option<usize> {
@@ -434,6 +441,7 @@ fn diff_sequences_kernel_backward(
     None
 }
 
+#[derive(Clone, Debug)]
 struct Snake {
     x0: isize,
     x1: isize,
@@ -455,7 +463,7 @@ impl Snake {
 }
 
 fn diff_sequences_kernel_bidirectional(
-    input: &DiffInput,
+    input: &Tokens,
     ctx_fwd: &mut DiffTraversal,
     ctx_bwd: &mut DiffTraversal,
     d: usize,
@@ -518,7 +526,7 @@ fn diff_sequences_kernel_bidirectional(
     None
 }
 
-fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<isize>, forward: bool) -> usize {
+fn diff_sequences_simple(input: &Tokens, v: &mut Vec<isize>, forward: bool) -> usize {
     let max_result = input.n() + input.m();
     let ctx = &mut DiffTraversal::from_vector(input, v, forward, max_result);
     (0..max_result)
@@ -527,7 +535,7 @@ fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<isize>, forward: bool) -
         .unwrap_or(max_result)
 }
 
-fn diff_sequences_bidirectional(input: &DiffInput, v: &mut Vec<isize>) -> Snake {
+fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> Snake {
     let max = (input.n() + input.m() + 1) / 2;
     let iter_len = 2 * max + 1;
     v.resize(2 * iter_len, 0);
