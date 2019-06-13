@@ -210,9 +210,11 @@ fn skip_escape_code_test() {
 
 #[test]
 fn skip_token_test() {
-    assert_eq!(3, skip_token(b"abc\x1b"));
+    assert_eq!(4, skip_token(b"abc\x1b"));
+    assert_eq!(3, skip_token(b"abc\x1b["));
     assert_eq!(3, skip_token(b"abc"));
-    assert_eq!(0, skip_token(b"\x1b"));
+    assert_eq!(1, skip_token(b"\x1b"));
+    assert_eq!(0, skip_token(b""));
 }
 
 #[test]

@@ -125,7 +125,17 @@ where
 // the number of bytes until either the next escape code or the end of
 // buf
 fn skip_token(buf: &[u8]) -> usize {
-    index_of(buf.iter().cloned(), b'\x1b').unwrap_or_else(|| buf.len())
+    match buf.len() {
+        0 => 0,
+        len => {
+            for i in 0..buf.len() - 1 {
+                if &buf[i..i + 2] == b"\x1b[" {
+                    return i;
+                 }
+            }
+            len
+        }
+    }
 }
 
 fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
