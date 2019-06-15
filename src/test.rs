@@ -72,6 +72,11 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     let result_r_bwd = diff_sequences_simple(&input_r, &mut v, false);
     let result_r_bidi = diff_sequences_bidirectional(&input_r, &mut v);
 
+    let mut result_complete = vec![];
+    diff(&input, &mut v, &mut result_complete);
+    let mut result_r_complete = vec![];
+    diff(&input_r, &mut v, &mut result_r_complete);
+
     let /*mut*/ path = vec![];
     let /*mut*/ path_added = vec![];
     let /*mut*/ path_removed = vec![];
@@ -128,17 +133,58 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     assert_eq!(d, result_r);
     assert_eq!(d, result_bwd);
     assert_eq!(d, result_r_bwd);
-    assert_eq!(d, result_bidi.d as usize);
-    assert_eq!(d, result_r_bidi.d as usize);
+    assert_eq!(d, result_bidi);
+    assert_eq!(d, result_r_bidi);
 
-    for (snake, input) in &[(&result_bidi, &input), (&result_r_bidi, &input_r)] {
-        let Snake { x0, x1, y0, y1, .. } = snake;
-        assert_eq!(x0 - x1, y0 - y1);
-        assert_eq!(
-            mk_vec((*x0..*x1).map(|x| input.seq_a(x))),
-            mk_vec((*y0..*y1).map(|y| input.seq_b(y))),
-        );
+    for complete in &[&result_complete, &result_r_complete] {
+        let all_snakes = complete
+            .iter()
+            .map(|s| {
+                assert_eq!(s.x1 - s.x0, s.y1 - s.y0);
+                s.x1 - s.x0
+            })
+            .fold(0, |acc, x| acc + x);
+
+        let d_calc = input.n() + input.m() - 2 * all_snakes as usize;
+        assert_eq!(d, d_calc);
     }
+    // construct edit script
+    let mut x0 = 0;
+    let mut y0 = 0;
+    let mut script = vec![];
+    for snake in result_complete {
+        let x = snake.x0 as usize;
+        let y = snake.y0 as usize;
+        let len = (snake.x1 - snake.x0) as usize;
+        if x0 != x {
+            assert!(x0 < x);
+            script.push((&input.removed.data[x0..x], Removed));
+        }
+        if y0 != y {
+            assert!(y0 < y);
+            script.push((&input.added.data[y0..y], Added));
+        }
+        assert_eq!(
+            &input.added.data[y..y + len],
+            &input.removed.data[x..x + len],
+        );
+        script.push((&input.added.data[y..y + len], Keep));
+        x0 = x + len;
+        y0 = y + len;
+    }
+
+    let x = input.removed.nb_tokens();
+    if x0 != x {
+        assert!(x0 < x);
+        script.push((&input.removed.data[x0..x], Removed));
+    }
+    let y = input.added.nb_tokens();
+    if y0 != y {
+        assert!(y0 < y);
+        script.push((&input.added.data[y0..y], Added));
+    }
+
+    assert_eq!(expected, &*script);
 }
 
 #[test]
@@ -208,9 +254,10 @@ fn skip_token_test() {
 fn diff_sequences_test_1() {
     diff_sequences_test(
         &[
-            (b"ab", Removed),
-            (b"c", Keep),
-            (b"b", Added),
+            (b"a", Removed),
+            (b"c", Added),
+            (b"b", Keep),
+            (b"c", Removed),
             (b"ab", Keep),
             (b"b", Removed),
             (b"a", Keep),
@@ -224,15 +271,7 @@ fn diff_sequences_test_1() {
 #[test]
 fn diff_sequences_test_2() {
     diff_sequences_test(
-        &[
-            (b"x", Added),
-            (b"a", Keep),
-            (b"x", Added),
-            (b"b", Keep),
-            (b"xab", Added),
-            (b"c", Keep),
-            (b"y", Removed),
-        ],
+        &[(b"xaxbx", Added), (b"abc", Keep), (b"y", Removed)],
         b"abcy",
         b"xaxbxabc",
     )
@@ -240,13 +279,13 @@ fn diff_sequences_test_2() {
 
 #[test]
 fn diff_sequences_test_3() {
-    diff_sequences_test(&[(b"defgh", Added), (b"abc", Removed)], b"abc", b"defgh")
+    diff_sequences_test(&[(b"abc", Removed), (b"defgh", Added)], b"abc", b"defgh")
 }
 
 #[test]
 fn diff_sequences_test_4() {
     diff_sequences_test(
-        &[(b"defg", Added), (b"abc", Removed), (b"zzz", Keep)],
+        &[(b"abc", Removed), (b"defg", Added), (b"zzz", Keep)],
         b"abczzz",
         b"defgzzz",
     )
@@ -255,7 +294,7 @@ fn diff_sequences_test_4() {
 #[test]
 fn diff_sequences_test_5() {
     diff_sequences_test(
-        &[(b"zzz", Keep), (b"defg", Added), (b"abcd", Removed)],
+        &[(b"zzz", Keep), (b"abcd", Removed), (b"efgh", Added)],
         b"zzzabcd",
         b"zzzefgh",
     )
@@ -269,6 +308,41 @@ fn diff_sequences_test_6() {
 #[test]
 fn diff_sequences_test_7() {
     diff_sequences_test(&[], b"", b"")
+}
+
+#[test]
+fn diff_sequences_test_8() {
+    // This tests the recursion in diff
+    diff_sequences_test(
+        &[
+            (b"a", Removed),
+            (b"c", Added),
+            (b"b", Keep),
+            (b"c", Removed),
+            (b"a", Keep),
+            (b"b", Removed),
+            (b"ba", Keep),
+            (b"a", Removed),
+            (b"cc", Added),
+            (b"b", Keep),
+            (b"c", Removed),
+            (b"ab", Keep),
+            (b"b", Removed),
+            (b"a", Keep),
+            (b"a", Removed),
+            (b"cc", Added),
+            (b"b", Keep),
+            (b"c", Removed),
+            // this is weird; the 2 next should be combined?
+            (b"a", Keep),
+            (b"b", Keep),
+            (b"b", Removed),
+            (b"a", Keep),
+            (b"c", Added),
+        ],
+        b"abcabbaabcabbaabcabba",
+        b"cbabaccbabaccbabac",
+    )
 }
 
 #[test]
@@ -355,4 +429,146 @@ fn path_test() {
         ],
         &[(0, 0), (1, 1), (2, 2), (2, 3), (5, 3)],
     );
+}
+
+#[test]
+fn find_splitting_point_test() {
+    fn test(expected: isize, seq_a: &[u8], seq_b: &[u8]) {
+        let toks_a = dummy_tokenize(&seq_a);
+        let toks_b = dummy_tokenize(&seq_b);
+        let input = Tokens {
+            added: Tokenization::new(&seq_b, &toks_b),
+            removed: Tokenization::new(&seq_a, &toks_a),
+        };
+
+        assert_eq!(expected, find_splitting_point(&input).sp);
+        for i in 0..expected {
+            assert_eq!(input.removed.seq(i), input.added.seq(i));
+        }
+        for i in expected..input.removed.nb_tokens() as isize {
+            assert_eq!(input.removed.seq(i), input.added.seq(i + 1));
+        }
+    }
+
+    test(0, b"abc", b"zabc");
+    test(1, b"abc", b"azbc");
+    test(2, b"abc", b"abzc");
+    test(3, b"abc", b"abcz");
+}
+
+fn get_lcs(seq_a: &[u8], seq_b: &[u8]) -> Vec<Vec<u8>> {
+    fn subsequences(seq_a: &[u8]) -> Vec<Vec<u8>> {
+        let res: Vec<Vec<u8>> = {
+            if seq_a.len() == 0 {
+                vec![vec![]]
+            } else if seq_a.len() == 1 {
+                vec![vec![], seq_a.to_owned()]
+            } else {
+                let (seq_a1, seq_a2) = seq_a.split_at(seq_a.len() / 2);
+                let mut res = vec![];
+                for part1 in subsequences(&seq_a1) {
+                    for part2 in subsequences(seq_a2) {
+                        let mut seq = vec![];
+                        seq.extend_from_slice(&part1);
+                        seq.extend_from_slice(&part2);
+                        res.push(seq);
+                    }
+                }
+                res
+            }
+        };
+        assert_eq!(res.len(), 2_usize.pow(seq_a.len() as u32));
+        res
+    }
+    fn is_subseq(subseq: &[u8], seq: &[u8]) -> bool {
+        if subseq.len() == 0 {
+            true
+        } else {
+            let target = subseq[0];
+            for i in 0..seq.len() {
+                if seq[i] == target {
+                    return is_subseq(&subseq[1..], &seq[i + 1..]);
+                }
+            }
+            false
+        }
+    }
+
+    let mut bests = vec![];
+    let mut best_len = 0;
+    for subseq in subsequences(seq_a) {
+        if subseq.len() < best_len || !is_subseq(&*subseq, seq_b) {
+            continue;
+        }
+        if best_len < subseq.len() {
+            bests.clear();
+            best_len = subseq.len();
+        }
+        if best_len <= subseq.len() {
+            bests.push(subseq)
+        }
+    }
+    bests
+}
+
+#[test]
+fn test_get_lcs() {
+    dbg!(get_lcs(b"abcd", b"cdef"));
+    let expected: &[u8] = b"cd";
+    assert_eq!(
+        expected,
+        &**get_lcs(b"abcd", b"cdef").iter().next().unwrap()
+    )
+}
+
+#[test]
+fn test_lcs_random() {
+    fn test_lcs(seq_a: &[u8], seq_b: &[u8]) {
+        let toks_a = dummy_tokenize(&seq_a);
+        let toks_b = dummy_tokenize(&seq_b);
+        let input = Tokens {
+            added: Tokenization::new(&seq_b, &toks_b),
+            removed: Tokenization::new(&seq_a, &toks_a),
+        };
+        let mut v = vec![];
+        let mut dst = vec![];
+        diff(&input, &mut v, &mut dst);
+
+        // check that dst content defines a subsequence of seq_a and seq_b
+        let mut diff_lcs = vec![];
+        for snake in dst {
+            let part_seq_a = (snake.x0..snake.x1)
+                .flat_map(|idx| input.removed.seq(idx).iter().cloned())
+                .collect::<Vec<_>>();
+            let part_seq_b = (snake.y0..snake.y1)
+                .flat_map(|idx| input.added.seq(idx).iter().cloned())
+                .collect::<Vec<_>>();
+            assert_eq!(&*part_seq_a, &*part_seq_b);
+            diff_lcs.extend_from_slice(&*part_seq_a);
+        }
+
+        // bruteforce check that it is the longest
+        assert!(get_lcs(seq_a, seq_b)
+            .iter()
+            .filter(|seq| **seq == diff_lcs)
+            .next()
+            .is_some());
+    }
+
+    let len_a = 6;
+    let len_b = 6;
+    let nletters = 3_u8;
+    let mut seq_a = vec![b'1'; len_a];
+    let mut seq_b = vec![b'1'; len_b];
+    for i in 0..len_a {
+        for j in 0..len_b {
+            for la in 0..nletters {
+                for lb in 0..nletters {
+                    seq_a[i] = la;
+                    seq_b[j] = lb;
+                    test_lcs(&seq_a, &seq_b);
+                }
+            }
+        }
+    }
 }

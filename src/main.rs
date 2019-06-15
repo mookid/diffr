@@ -182,7 +182,8 @@ impl HunkBuffer {
             added: Tokenization::new(&self.added, &added_tokens),
         };
 
-        let _diff = diff_sequences_bidirectional(&tokens, v);
+        let mut diff_buffer = vec![];
+        let _ = diff(&tokens, v, &mut diff_buffer);
 
         output(&self.removed, Some(Red), out)?;
         output(&self.added, Some(Green), out)?;
@@ -194,18 +195,50 @@ impl HunkBuffer {
 struct Tokenization<'a> {
     data: &'a [u8],
     tokens: &'a [(usize, usize)],
+    start_index: isize,
+    one_past_end_index: isize,
 }
 
 impl<'a> Tokenization<'a> {
     fn new(data: &'a [u8], tokens: &'a [(usize, usize)]) -> Self {
-        Tokenization { data, tokens }
+        Tokenization {
+            data,
+            tokens,
+            start_index: 0,
+            one_past_end_index: tokens.len() as isize,
+        }
+    }
+
+    fn split_at(&self, lo: isize, hi: isize) -> (Self, Self) {
+        let start = self.start_index;
+        let end = self.one_past_end_index;
+        assert!(start <= lo);
+        assert!(lo <= hi);
+        assert!(hi <= end);
+        (
+            Tokenization {
+                one_past_end_index: lo,
+                ..*self
+            },
+            Tokenization {
+                start_index: hi,
+                ..*self
+            },
+        )
     }
 
     fn nb_tokens(&self) -> usize {
-        self.tokens.len() as usize
+        assert!(
+            self.start_index <= self.one_past_end_index,
+            "{} {}",
+            self.start_index,
+            self.one_past_end_index
+        );
+        (self.one_past_end_index - self.start_index) as usize
     }
 
     fn seq(&self, index: isize) -> &[u8] {
+        let index = self.start_index + index;
         assert!(0 <= index);
         let range = self.tokens[index as usize];
         &self.data[range.0..range.1]
@@ -215,6 +248,22 @@ impl<'a> Tokenization<'a> {
 type Tokens<'a> = DiffPair<Tokenization<'a>>;
 
 impl<'a> Tokens<'a> {
+    fn split_at(&self, (x0, y0): (isize, isize), (x1, y1): (isize, isize)) -> (Self, Self) {
+        let (removed1, removed2) = self.removed.split_at(x0, x1);
+        let (added1, added2) = self.added.split_at(y0, y1);
+
+        (
+            DiffPair {
+                added: added1,
+                removed: removed1,
+            },
+            DiffPair {
+                added: added2,
+                removed: removed2,
+            },
+        )
+    }
+
     fn n(&self) -> usize {
         self.removed.nb_tokens()
     }
@@ -351,14 +400,13 @@ struct DiffTraversal<'a> {
 
 impl<'a> DiffTraversal<'a> {
     fn from_slice(input: &'a Tokens<'a>, v: &'a mut [isize], forward: bool, max: usize) -> Self {
-        let n = input.n() as isize;
-        let m = input.m() as isize;
+        let start = (input.removed.start_index, input.added.start_index);
+        let end = (
+            input.removed.one_past_end_index,
+            input.added.one_past_end_index,
+        );
         assert!(max * 2 + 1 <= v.len());
-        let (start, end) = if forward {
-            ((0, 0), (n, m))
-        } else {
-            ((n, m), (0, 0))
-        };
+        let (start, end) = if forward { (start, end) } else { (end, start) };
         let mut res = DiffTraversal {
             v,
             max,
@@ -366,7 +414,7 @@ impl<'a> DiffTraversal<'a> {
             end,
         };
         if max != 0 {
-            *res.v_mut(1) = start.0
+            *res.v_mut(1) = start.0 - input.removed.start_index
         }
         res
     }
@@ -560,17 +608,92 @@ fn diff_sequences_simple(input: &Tokens, v: &mut Vec<isize>, forward: bool) -> u
         .unwrap_or(max_result)
 }
 
-fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> Snake {
-    let max = (input.n() + input.m() + 1) / 2;
+fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
+    let n = input.n() as isize;
+    let m = input.m() as isize;
+    fn trivial_diff(tok: &Tokenization) -> bool {
+        tok.one_past_end_index <= tok.start_index
+    }
+
+    if trivial_diff(&input.removed) || trivial_diff(&input.added) {
+        return;
+    }
+
+    let snake = diff_sequences_bidirectional_snake(input, v);
+    let &Snake { x0, x1, y0, y1, d } = &snake;
+    if 1 < d {
+        let (input1, input2) = input.split_at((x0, y0), (x1, y1));
+        diff(&input1, v, dst);
+        if x0 != x1 {
+            dst.push(snake);
+        }
+        diff(&input2, v, dst);
+    } else {
+        let SplittingPoint { sp, dx, dy } = find_splitting_point(&input);
+        let x0 = input.removed.start_index;
+        let y0 = input.added.start_index;
+        if sp != 0 {
+            dst.push(Snake::new().from(x0, y0).to(x0 + sp, y0 + sp));
+        }
+        if sp != n.min(m) {
+            dst.push(
+                Snake::new()
+                    .from(x0 + sp + dx, y0 + sp + dy)
+                    .to(x0 + n, y0 + m),
+            );
+        }
+    }
+}
+
+struct SplittingPoint {
+    sp: isize,
+    dx: isize,
+    dy: isize,
+}
+
+// Find the splitting point when two sequences differ by one element.
+fn find_splitting_point(input: &Tokens) -> SplittingPoint {
+    let n = input.n() as isize;
+    let m = input.m() as isize;
+    let (short, long, nb_tokens, dx, dy) = if n < m {
+        (&input.removed, &input.added, n, 0, 1)
+    } else if m < n {
+        (&input.added, &input.removed, m, 1, 0)
+    } else {
+        (&input.added, &input.removed, m, 0, 0)
+    };
+    let mut sp = nb_tokens;
+    for i in 0..nb_tokens {
+        if long.seq(i) != short.seq(i) {
+            sp = i;
+            break;
+        }
+    }
+    SplittingPoint { sp, dx, dy }
+}
+
+fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> usize {
+    if input.n() + input.m() == 0 {
+        return 0;
+    }
+    let result = diff_sequences_bidirectional_snake(input, v).d;
+    assert!(0 <= result);
+    result as usize
+}
+
+fn diff_sequences_bidirectional_snake(input: &Tokens, v: &mut Vec<isize>) -> Snake {
+    let max = (input.n() + input.m() + 1) / 2 + 1;
     let iter_len = 2 * max + 1;
     v.resize(2 * iter_len, 0);
+
     let (v1, v2) = v.split_at_mut(iter_len);
     let ctx_fwd = &mut DiffTraversal::from_slice(input, v1, true, max);
     let ctx_bwd = &mut DiffTraversal::from_slice(input, v2, false, max);
     (0..max)
         .filter_map(|d| diff_sequences_kernel_bidirectional(input, ctx_fwd, ctx_bwd, d))
         .next()
-        .unwrap_or_else(|| Snake::new().d((input.n() + input.m()) as isize))
+        .expect("snake not found")
+        .recenter(input.removed.start_index, input.added.start_index)
 }
 
 fn is_alphanum(b: u8) -> bool {
