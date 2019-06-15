@@ -131,7 +131,7 @@ fn skip_token(buf: &[u8]) -> usize {
             for i in 0..buf.len() - 1 {
                 if &buf[i..i + 2] == b"\x1b[" {
                     return i;
-                 }
+                }
             }
             len
         }
@@ -178,14 +178,8 @@ impl HunkBuffer {
         let added_tokens = tokenize(&self.added);
 
         let tokens = Tokens {
-            removed: Tokenization {
-                data: &self.removed,
-                tokens: &removed_tokens,
-            },
-            added: Tokenization {
-                data: &self.added,
-                tokens: &added_tokens,
-            },
+            removed: Tokenization::new(&self.removed, &removed_tokens),
+            added: Tokenization::new(&self.added, &added_tokens),
         };
 
         let _diff = diff_sequences_bidirectional(&tokens, v);
@@ -202,29 +196,39 @@ struct Tokenization<'a> {
     tokens: &'a [(usize, usize)],
 }
 
+impl<'a> Tokenization<'a> {
+    fn new(data: &'a [u8], tokens: &'a [(usize, usize)]) -> Self {
+        Tokenization { data, tokens }
+    }
+
+    fn nb_tokens(&self) -> usize {
+        self.tokens.len() as usize
+    }
+
+    fn seq(&self, index: isize) -> &[u8] {
+        assert!(0 <= index);
+        let range = self.tokens[index as usize];
+        &self.data[range.0..range.1]
+    }
+}
+
 type Tokens<'a> = DiffPair<Tokenization<'a>>;
 
 impl<'a> Tokens<'a> {
     fn n(&self) -> usize {
-        self.removed.tokens.len()
+        self.removed.nb_tokens()
     }
 
     fn m(&self) -> usize {
-        self.added.tokens.len()
+        self.added.nb_tokens()
     }
 
     fn seq_a(&self, index: isize) -> &[u8] {
-        Self::get_slice(&self.removed.data, &self.removed.tokens, index)
+        &self.removed.seq(index)
     }
 
     fn seq_b(&self, index: isize) -> &[u8] {
-        Self::get_slice(&self.added.data, &self.added.tokens, index)
-    }
-
-    fn get_slice<'t>(data: &'t [u8], tokens: &'t [(usize, usize)], index: isize) -> &'t [u8] {
-        assert!(0 <= index);
-        let range = tokens[index as usize];
-        &data[range.0..range.1]
+        &self.added.seq(index)
     }
 }
 
@@ -457,18 +461,43 @@ struct Snake {
     x1: isize,
     y0: isize,
     y1: isize,
-    d: usize,
+    d: isize,
 }
 
 impl Snake {
-    fn fail(n: usize, m: usize) -> Self {
+    fn new() -> Self {
         Snake {
             x0: 0,
             y0: 0,
             x1: 0,
             y1: 0,
-            d: n + m,
+            d: 0,
         }
+    }
+
+    fn from(mut self, x0: isize, y0: isize) -> Self {
+        self.x0 = x0;
+        self.y0 = y0;
+        self
+    }
+
+    fn to(mut self, x1: isize, y1: isize) -> Self {
+        self.x1 = x1;
+        self.y1 = y1;
+        self
+    }
+
+    fn d(mut self, d: isize) -> Self {
+        self.d = d;
+        self
+    }
+
+    fn recenter(mut self, dx: isize, dy: isize) -> Self {
+        self.x0 += dx;
+        self.x1 += dx;
+        self.y0 += dy;
+        self.y1 += dy;
+        self
     }
 }
 
@@ -498,14 +527,7 @@ fn diff_sequences_kernel_bidirectional(
             y += 1;
         }
         if odd && (k - delta).abs() <= d - 1 && x > ctx_bwd.v(k - delta) {
-            let d = 2 * d as usize - 1;
-            return Some(Snake {
-                x0,
-                y0,
-                x1: x,
-                y1: y,
-                d,
-            });
+            return Some(Snake::new().from(x0, y0).to(x, y).d(2 * d - 1));
         }
         *ctx_fwd.v_mut(k) = x;
     }
@@ -522,14 +544,7 @@ fn diff_sequences_kernel_bidirectional(
             y -= 1;
         }
         if !odd && (k + delta).abs() <= d && x - 1 < ctx_fwd.v(k + delta) {
-            let d = 2 * d as usize;
-            return Some(Snake {
-                x0: x,
-                y0: y,
-                x1,
-                y1,
-                d,
-            });
+            return Some(Snake::new().from(x, y).to(x1, y1).d(2 * d));
         }
         *ctx_bwd.v_mut(k) = x - 1;
     }
@@ -555,7 +570,7 @@ fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> Snake {
     (0..max)
         .filter_map(|d| diff_sequences_kernel_bidirectional(input, ctx_fwd, ctx_bwd, d))
         .next()
-        .unwrap_or_else(|| Snake::fail(input.n(), input.m()))
+        .unwrap_or_else(|| Snake::new().d((input.n() + input.m()) as isize))
 }
 
 fn is_alphanum(b: u8) -> bool {

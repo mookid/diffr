@@ -56,28 +56,15 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     let toks_a = dummy_tokenize(&seq_a);
     let toks_b = dummy_tokenize(&seq_b);
     let input = Tokens {
-        added: Tokenization {
-            data: &seq_b,
-            tokens: &toks_b,
-        },
-        removed: Tokenization {
-            data: &seq_a,
-            tokens: &toks_a,
-        },
+        added: Tokenization::new(&seq_b, &toks_b),
+        removed: Tokenization::new(&seq_a, &toks_a),
     };
     let input_r = Tokens {
-        added: Tokenization {
-            data: &seq_a,
-            tokens: &toks_a,
-        },
-        removed: Tokenization {
-            data: &seq_b,
-            tokens: &toks_b,
-        },
+        added: Tokenization::new(&seq_a, &toks_a),
+        removed: Tokenization::new(&seq_b, &toks_b),
     };
 
     let mut v = vec![];
-    dbg!(&input);
     let result = diff_sequences_simple(&input, &mut v, true);
     let result_bwd = diff_sequences_simple(&input, &mut v, false);
     let result_bidi = diff_sequences_bidirectional(&input, &mut v);
@@ -141,8 +128,8 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     assert_eq!(d, result_r);
     assert_eq!(d, result_bwd);
     assert_eq!(d, result_r_bwd);
-    assert_eq!(d, result_bidi.d);
-    assert_eq!(d, result_r_bidi.d);
+    assert_eq!(d, result_bidi.d as usize);
+    assert_eq!(d, result_r_bidi.d as usize);
 
     for (snake, input) in &[(&result_bidi, &input), (&result_r_bidi, &input_r)] {
         let Snake { x0, x1, y0, y1, .. } = snake;
