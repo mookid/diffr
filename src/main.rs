@@ -685,16 +685,23 @@ fn output<Stream>(buf: &[u8], color: Option<termcolor::Color>, out: &mut Stream)
 where
     Stream: termcolor::WriteColor,
 {
-    out.set_color(ColorSpec::default().set_fg(color))?;
-    let whole_line = !buf.is_empty() && buf[buf.len() - 1] == b'\n';
-    let buf = if whole_line {
-        &buf[..buf.len() - 1]
+    let mut i = 0;
+    let len = buf.len();
+    let ends_with_newline = len != 0 && buf[len - 1] == b'\n';
+    let (buf, len) = if ends_with_newline {
+        (&buf[..len - 1], len - 1)
     } else {
-        buf
+        (&buf[..], len)
     };
-    out.write_all(buf)?;
+    while i < len {
+        out.set_color(ColorSpec::default().set_fg(color))?;
+        let buf = &buf[i..];
+        let hi = index_of(buf.iter().cloned(), b'\n').unwrap_or(buf.len() - 1) + 1;
+        out.write_all(&buf[..hi])?;
+        i += hi;
+    }
     out.reset()?;
-    if whole_line {
+    if ends_with_newline {
         out.write_all(b"\n")?;
     }
     Ok(())
