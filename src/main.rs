@@ -1,4 +1,5 @@
 use crate::DiffKind::*;
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use termcolor::{
@@ -209,7 +210,7 @@ impl<'a> Tokenization<'a> {
             data,
             tokens,
             start_index: 0,
-            one_past_end_index: tokens.len() as isize,
+            one_past_end_index: to_isize(tokens.len()),
         }
     }
 
@@ -232,20 +233,12 @@ impl<'a> Tokenization<'a> {
     }
 
     fn nb_tokens(&self) -> usize {
-        assert!(
-            self.start_index <= self.one_past_end_index,
-            "{} {}",
-            self.start_index,
-            self.one_past_end_index
-        );
-        (self.one_past_end_index - self.start_index) as usize
+        to_usize(self.one_past_end_index - self.start_index)
     }
 
     fn seq(&self, index: isize) -> &[u8] {
-        let index = self.start_index + index;
-        assert!(0 <= index);
-        let range = self.tokens[index as usize];
-        &self.data[range.0..range.1]
+        let (lo, hi) = self.tokens[to_usize(self.start_index + index)];
+        &self.data[lo..hi]
     }
 }
 
@@ -368,8 +361,7 @@ impl<'a> Iterator for Path<'a> {
                 (true, false) => (Removed, x1 - x0),
                 (false, false) => panic!("invariant error: duplicate point"),
             };
-            assert!(0 < len);
-            DiffPathItem(kind, len as usize, x0, y0)
+            DiffPathItem(kind, len, x0, y0)
         })
     }
 }
@@ -385,8 +377,11 @@ impl Diff {
 }
 
 fn aligned(z0: &Point, z1: &Point, z2: &Point) -> bool {
-    fn vector(z0: &Point, z1: &Point) -> (i64, i64) {
-        (z1.0 as i64 - z0.0 as i64, z1.1 as i64 - z0.1 as i64)
+    fn vector(z0: &Point, z1: &Point) -> (isize, isize) {
+        (
+            to_isize(z1.0) - to_isize(z0.0),
+            to_isize(z1.1) - to_isize(z0.1),
+        )
     }
     let v01 = vector(z0, z1);
     let v02 = vector(z0, z2);
@@ -432,11 +427,11 @@ impl<'a> DiffTraversal<'a> {
     }
 
     fn v(&self, index: isize) -> isize {
-        self.v[(index + self.max as isize) as usize]
+        self.v[to_usize(index + to_isize(self.max))]
     }
 
     fn v_mut(&mut self, index: isize) -> &mut isize {
-        &mut self.v[(index + self.max as isize) as usize]
+        &mut self.v[to_usize(index + to_isize(self.max))]
     }
 }
 
@@ -453,10 +448,10 @@ fn diff_sequences_kernel_forward(
     ctx: &mut DiffTraversal,
     d: usize,
 ) -> Option<usize> {
-    let n = input.n() as isize;
-    let m = input.m() as isize;
+    let n = to_isize(input.n());
+    let m = to_isize(input.m());
     assert!(d < ctx.max);
-    let d = d as isize;
+    let d = to_isize(d);
     for k in (-d..=d).step_by(2) {
         let mut x = if k == -d || k != d && ctx.v(k - 1) < ctx.v(k + 1) {
             ctx.v(k + 1)
@@ -470,7 +465,7 @@ fn diff_sequences_kernel_forward(
         }
         *ctx.v_mut(k) = x;
         if ctx.end == (x, y) {
-            return Some(d as usize);
+            return Some(to_usize(d));
         }
     }
     None
@@ -481,11 +476,11 @@ fn diff_sequences_kernel_backward(
     ctx: &mut DiffTraversal,
     d: usize,
 ) -> Option<usize> {
-    let n = input.n() as isize;
-    let m = input.m() as isize;
+    let n = to_isize(input.n());
+    let m = to_isize(input.m());
     let delta = n - m;
     assert!(d < ctx.max);
-    let d = d as isize;
+    let d = to_isize(d);
     for k in (-d..=d).step_by(2) {
         let mut x = if k == -d || k != d && ctx.v(k + 1) < ctx.v(k - 1) {
             ctx.v(k + 1)
@@ -499,7 +494,7 @@ fn diff_sequences_kernel_backward(
         }
         *ctx.v_mut(k) = x - 1;
         if ctx.end == (x, y) {
-            return Some(d as usize);
+            return Some(to_usize(d));
         }
     }
     None
@@ -552,13 +547,13 @@ fn diff_sequences_kernel_bidirectional(
     ctx_bwd: &mut DiffTraversal,
     d: usize,
 ) -> Option<Snake> {
-    let n = input.n() as isize;
-    let m = input.m() as isize;
+    let n = to_isize(input.n());
+    let m = to_isize(input.m());
     let delta = n - m;
     let odd = delta % 2 != 0;
     assert!(d < ctx_fwd.max);
     assert!(d < ctx_bwd.max);
-    let d = d as isize;
+    let d = to_isize(d);
     for k in (-d..=d).step_by(2) {
         let mut x = if k == -d || k != d && ctx_fwd.v(k - 1) < ctx_fwd.v(k + 1) {
             ctx_fwd.v(k + 1)
@@ -670,9 +665,7 @@ fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> usize {
     if input.n() + input.m() == 0 {
         return 0;
     }
-    let result = diff_sequences_bidirectional_snake(input, v).d;
-    assert!(0 <= result);
-    result as usize
+    to_usize(diff_sequences_bidirectional_snake(input, v).d)
 }
 
 fn diff_sequences_bidirectional_snake(input: &Tokens, v: &mut Vec<isize>) -> Snake {
@@ -747,6 +740,14 @@ fn skip_all_escape_code(buf: &[u8]) -> usize {
         sum += nbytes
     }
     sum
+}
+
+fn to_isize(input: usize) -> isize {
+    isize::try_from(input).unwrap()
+}
+
+fn to_usize(input: isize) -> usize {
+    usize::try_from(input).unwrap()
 }
 
 #[cfg(test)]

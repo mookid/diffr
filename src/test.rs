@@ -139,7 +139,7 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     for complete in &[&result_complete, &result_r_complete] {
         let all_snakes = complete.iter().fold(0, |acc, s| acc + s.len);
 
-        let d_calc = input.n() + input.m() - 2 * all_snakes as usize;
+        let d_calc = input.n() + input.m() - 2 * to_usize(all_snakes);
         assert_eq!(d, d_calc);
     }
     // construct edit script
@@ -147,9 +147,9 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     let mut y0 = 0;
     let mut script = vec![];
     for snake in result_complete {
-        let x = snake.x0 as usize;
-        let y = snake.y0 as usize;
-        let len = snake.len as usize;
+        let x = to_usize(snake.x0);
+        let y = to_usize(snake.y0);
+        let len = to_usize(snake.len);
         if x0 != x {
             assert!(x0 < x);
             script.push((&input.removed.data[x0..x], Removed));
@@ -440,7 +440,7 @@ fn find_splitting_point_test() {
         for i in 0..expected {
             assert_eq!(input.removed.seq(i), input.added.seq(i));
         }
-        for i in expected..input.removed.nb_tokens() as isize {
+        for i in expected..to_isize(input.removed.nb_tokens()) {
             assert_eq!(input.removed.seq(i), input.added.seq(i + 1));
         }
     }
@@ -566,4 +566,10 @@ fn test_lcs_random() {
             }
         }
     }
+}
+
+#[should_panic]
+#[test]
+fn to_usize_checked_negative_test() {
+    to_usize(-1_isize);
 }
