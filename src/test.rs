@@ -137,13 +137,7 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     assert_eq!(d, result_r_bidi);
 
     for complete in &[&result_complete, &result_r_complete] {
-        let all_snakes = complete
-            .iter()
-            .map(|s| {
-                assert_eq!(s.x1 - s.x0, s.y1 - s.y0);
-                s.x1 - s.x0
-            })
-            .fold(0, |acc, x| acc + x);
+        let all_snakes = complete.iter().fold(0, |acc, s| acc + s.len);
 
         let d_calc = input.n() + input.m() - 2 * all_snakes as usize;
         assert_eq!(d, d_calc);
@@ -155,7 +149,7 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     for snake in result_complete {
         let x = snake.x0 as usize;
         let y = snake.y0 as usize;
-        let len = (snake.x1 - snake.x0) as usize;
+        let len = snake.len as usize;
         if x0 != x {
             assert!(x0 < x);
             script.push((&input.removed.data[x0..x], Removed));
@@ -363,7 +357,8 @@ fn aligned_test() {
 #[test]
 fn tokenize_test() {
     fn test(expected: &[&str], buf: &[u8]) {
-        let tokens = tokenize(buf);
+        let mut tokens = vec![];
+        tokenize(&mut tokens, buf);
         assert_eq!(
             buf.len(),
             tokens.iter().map(|range| range.1 - range.0).sum()
@@ -536,11 +531,11 @@ fn test_lcs_random() {
 
         // check that dst content defines a subsequence of seq_a and seq_b
         let mut diff_lcs = vec![];
-        for snake in dst {
-            let part_seq_a = (snake.x0..snake.x1)
+        for Snake { x0, y0, len, .. } in dst {
+            let part_seq_a = (x0..x0 + len)
                 .flat_map(|idx| input.removed.seq(idx).iter().cloned())
                 .collect::<Vec<_>>();
-            let part_seq_b = (snake.y0..snake.y1)
+            let part_seq_b = (y0..y0 + len)
                 .flat_map(|idx| input.added.seq(idx).iter().cloned())
                 .collect::<Vec<_>>();
             assert_eq!(&*part_seq_a, &*part_seq_b);

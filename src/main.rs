@@ -45,8 +45,7 @@ fn main() -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
-    let mut hunk_buffer = HunkBuffer::new();
-    let mut v_buffer = vec![];
+    let mut hunk_buffer = HunkBuffer::default();
     let mut stdin = mk_reader(&stdin);
     let mut stdout = stdout.lock();
 
@@ -75,8 +74,7 @@ fn main() -> io::Result<()> {
             Some(b'-') => hunk_buffer.push_removed(&buffer),
             _ => {
                 let start = std::time::SystemTime::now();
-                hunk_buffer.process(&mut v_buffer, &mut stdout)?;
-                hunk_buffer.clear();
+                hunk_buffer.process(&mut stdout)?;
                 output(&buffer, None, &mut stdout)?;
                 time_computing_diff_ms += start.elapsed().unwrap().as_millis();
             }
@@ -85,7 +83,7 @@ fn main() -> io::Result<()> {
     }
 
     // flush remaining hunk
-    hunk_buffer.process(&mut v_buffer, &mut stdout)?;
+    hunk_buffer.process(&mut stdout)?;
     eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
     eprintln!(
         "total processing time (ms): {}",
@@ -100,7 +98,55 @@ struct DiffPair<T> {
     removed: T,
 }
 
-type HunkBuffer = DiffPair<Vec<u8>>;
+#[derive(Default)]
+struct HunkBuffer {
+    v: Vec<isize>,
+    diff_buffer: Vec<Snake>,
+    added_tokens: Vec<(usize, usize)>,
+    removed_tokens: Vec<(usize, usize)>,
+    added_lines: Vec<u8>,
+    removed_lines: Vec<u8>,
+}
+
+impl HunkBuffer {
+    fn process<Stream>(&mut self, out: &mut Stream) -> io::Result<()>
+    where
+        Stream: termcolor::WriteColor,
+    {
+        let Self {
+            v,
+            diff_buffer,
+            added_tokens,
+            removed_tokens,
+            added_lines,
+            removed_lines,
+        } = self;
+        diff_buffer.clear();
+        tokenize(removed_tokens, removed_lines);
+        tokenize(added_tokens, added_lines);
+
+        let tokens = Tokens {
+            removed: Tokenization::new(removed_lines, removed_tokens),
+            added: Tokenization::new(added_lines, added_tokens),
+        };
+
+        let _ = diff(&tokens, v, diff_buffer);
+
+        output(removed_lines, Some(Red), out)?;
+        output(added_lines, Some(Green), out)?;
+        added_lines.clear();
+        removed_lines.clear();
+        Ok(())
+    }
+
+    fn push_added(&mut self, line: &[u8]) {
+        add_raw_line(&mut self.added_lines, line)
+    }
+
+    fn push_removed(&mut self, line: &[u8]) {
+        add_raw_line(&mut self.removed_lines, line)
+    }
+}
 
 // Scan buf looking for target, returning the index of its first
 // appearance.
@@ -146,48 +192,6 @@ fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
         let tok_len = skip_token(&line[i..]);
         dst.extend_from_slice(&line[i..i + tok_len]);
         i += tok_len;
-    }
-}
-
-impl HunkBuffer {
-    fn new() -> Self {
-        HunkBuffer {
-            added: vec![],
-            removed: vec![],
-        }
-    }
-
-    fn clear(&mut self) {
-        self.added.clear();
-        self.removed.clear();
-    }
-
-    fn push_added(&mut self, line: &[u8]) {
-        add_raw_line(&mut self.added, line)
-    }
-
-    fn push_removed(&mut self, line: &[u8]) {
-        add_raw_line(&mut self.removed, line)
-    }
-
-    fn process<Stream>(&self, v: &mut Vec<isize>, out: &mut Stream) -> io::Result<()>
-    where
-        Stream: termcolor::WriteColor,
-    {
-        let removed_tokens = tokenize(&self.removed);
-        let added_tokens = tokenize(&self.added);
-
-        let tokens = Tokens {
-            removed: Tokenization::new(&self.removed, &removed_tokens),
-            added: Tokenization::new(&self.added, &added_tokens),
-        };
-
-        let mut diff_buffer = vec![];
-        let _ = diff(&tokens, v, &mut diff_buffer);
-
-        output(&self.removed, Some(Red), out)?;
-        output(&self.added, Some(Green), out)?;
-        Ok(())
     }
 }
 
@@ -281,11 +285,10 @@ impl<'a> Tokens<'a> {
     }
 }
 
-fn tokenize(src: &[u8]) -> Vec<(usize, usize)> {
-    let mut tokens = vec![];
+fn tokenize(tokens: &mut Vec<(usize, usize)>, src: &[u8]) {
+    tokens.clear();
     let mut lo = 0;
-    let mut it = src.iter().clone().enumerate();
-    while let Some((hi, b)) = it.next() {
+    for (hi, b) in src.iter().enumerate() {
         if !is_alphanum(*b) {
             if lo < hi {
                 tokens.push((lo, hi));
@@ -297,7 +300,6 @@ fn tokenize(src: &[u8]) -> Vec<(usize, usize)> {
     if lo < src.len() {
         tokens.push((lo, src.len()));
     }
-    tokens
 }
 
 type Point = (usize, usize);
@@ -506,9 +508,8 @@ fn diff_sequences_kernel_backward(
 #[derive(Clone, Debug)]
 struct Snake {
     x0: isize,
-    x1: isize,
     y0: isize,
-    y1: isize,
+    len: isize,
     d: isize,
 }
 
@@ -517,8 +518,7 @@ impl Snake {
         Snake {
             x0: 0,
             y0: 0,
-            x1: 0,
-            y1: 0,
+            len: 0,
             d: 0,
         }
     }
@@ -529,9 +529,8 @@ impl Snake {
         self
     }
 
-    fn to(mut self, x1: isize, y1: isize) -> Self {
-        self.x1 = x1;
-        self.y1 = y1;
+    fn len(mut self, len: isize) -> Self {
+        self.len = len;
         self
     }
 
@@ -542,9 +541,7 @@ impl Snake {
 
     fn recenter(mut self, dx: isize, dy: isize) -> Self {
         self.x0 += dx;
-        self.x1 += dx;
         self.y0 += dy;
-        self.y1 += dy;
         self
     }
 }
@@ -575,7 +572,7 @@ fn diff_sequences_kernel_bidirectional(
             y += 1;
         }
         if odd && (k - delta).abs() <= d - 1 && x > ctx_bwd.v(k - delta) {
-            return Some(Snake::new().from(x0, y0).to(x, y).d(2 * d - 1));
+            return Some(Snake::new().from(x0, y0).len(x - x0).d(2 * d - 1));
         }
         *ctx_fwd.v_mut(k) = x;
     }
@@ -586,13 +583,13 @@ fn diff_sequences_kernel_bidirectional(
             ctx_bwd.v(k - 1) + 1
         };
         let mut y = x - (k + delta);
-        let (x1, y1) = (x, y);
+        let x1 = x;
         while 0 < x && 0 < y && input.seq_a(x - 1) == input.seq_b(y - 1) {
             x -= 1;
             y -= 1;
         }
         if !odd && (k + delta).abs() <= d && x - 1 < ctx_fwd.v(k + delta) {
-            return Some(Snake::new().from(x, y).to(x1, y1).d(2 * d));
+            return Some(Snake::new().from(x, y).len(x1 - x).d(2 * d));
         }
         *ctx_bwd.v_mut(k) = x - 1;
     }
@@ -620,11 +617,11 @@ fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
     }
 
     let snake = diff_sequences_bidirectional_snake(input, v);
-    let &Snake { x0, x1, y0, y1, d } = &snake;
+    let &Snake { x0, y0, len, d } = &snake;
     if 1 < d {
-        let (input1, input2) = input.split_at((x0, y0), (x1, y1));
+        let (input1, input2) = input.split_at((x0, y0), (x0 + len, y0 + len));
         diff(&input1, v, dst);
-        if x0 != x1 {
+        if len != 0 {
             dst.push(snake);
         }
         diff(&input2, v, dst);
@@ -633,14 +630,11 @@ fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
         let x0 = input.removed.start_index;
         let y0 = input.added.start_index;
         if sp != 0 {
-            dst.push(Snake::new().from(x0, y0).to(x0 + sp, y0 + sp));
+            dst.push(Snake::new().from(x0, y0).len(sp));
         }
-        if sp != n.min(m) {
-            dst.push(
-                Snake::new()
-                    .from(x0 + sp + dx, y0 + sp + dy)
-                    .to(x0 + n, y0 + m),
-            );
+        let len = n - sp - dx;
+        if len != 0 {
+            dst.push(Snake::new().from(x0 + sp + dx, y0 + sp + dy).len(len));
         }
     }
 }
@@ -714,10 +708,10 @@ where
     } else {
         buf
     };
-    out.write(buf)?;
+    out.write_all(buf)?;
     out.reset()?;
     if whole_line {
-        out.write(b"\n")?;
+        out.write_all(b"\n")?;
     }
     Ok(())
 }
