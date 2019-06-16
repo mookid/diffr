@@ -93,7 +93,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct DiffPair<T> {
     added: T,
     removed: T,
@@ -500,7 +500,7 @@ fn diff_sequences_kernel_backward(
     None
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Snake {
     x0: isize,
     y0: isize,
@@ -509,15 +509,6 @@ struct Snake {
 }
 
 impl Snake {
-    fn new() -> Self {
-        Snake {
-            x0: 0,
-            y0: 0,
-            len: 0,
-            d: 0,
-        }
-    }
-
     fn from(mut self, x0: isize, y0: isize) -> Self {
         self.x0 = x0;
         self.y0 = y0;
@@ -567,7 +558,7 @@ fn diff_sequences_kernel_bidirectional(
             y += 1;
         }
         if odd && (k - delta).abs() <= d - 1 && x > ctx_bwd.v(k - delta) {
-            return Some(Snake::new().from(x0, y0).len(x - x0).d(2 * d - 1));
+            return Some(Snake::default().from(x0, y0).len(x - x0).d(2 * d - 1));
         }
         *ctx_fwd.v_mut(k) = x;
     }
@@ -584,7 +575,7 @@ fn diff_sequences_kernel_bidirectional(
             y -= 1;
         }
         if !odd && (k + delta).abs() <= d && x - 1 < ctx_fwd.v(k + delta) {
-            return Some(Snake::new().from(x, y).len(x1 - x).d(2 * d));
+            return Some(Snake::default().from(x, y).len(x1 - x).d(2 * d));
         }
         *ctx_bwd.v_mut(k) = x - 1;
     }
@@ -625,11 +616,11 @@ fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
         let x0 = input.removed.start_index;
         let y0 = input.added.start_index;
         if sp != 0 {
-            dst.push(Snake::new().from(x0, y0).len(sp));
+            dst.push(Snake::default().from(x0, y0).len(sp));
         }
         let len = n - sp - dx;
         if len != 0 {
-            dst.push(Snake::new().from(x0 + sp + dx, y0 + sp + dy).len(len));
+            dst.push(Snake::default().from(x0 + sp + dx, y0 + sp + dy).len(len));
         }
     }
 }
@@ -694,7 +685,7 @@ fn output<Stream>(buf: &[u8], color: Option<termcolor::Color>, out: &mut Stream)
 where
     Stream: termcolor::WriteColor,
 {
-    out.set_color(ColorSpec::new().set_fg(color))?;
+    out.set_color(ColorSpec::default().set_fg(color))?;
     let whole_line = !buf.is_empty() && buf[buf.len() - 1] == b'\n';
     let buf = if whole_line {
         &buf[..buf.len() - 1]
