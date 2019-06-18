@@ -3,8 +3,10 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use termcolor::{
+    Color,
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream,
+    WriteColor,
 };
 
 fn usage() -> ! {
@@ -110,9 +112,35 @@ struct HunkBuffer {
 }
 
 impl HunkBuffer {
+    fn paint_lines<Stream, Positions>(
+        tokens: &Tokenization,
+        color: Color,
+        positions: Positions,
+        out: &mut Stream,
+    ) -> io::Result<()>
+    where
+        Stream: WriteColor,
+        Positions: Iterator<Item=(isize, isize)>
+    {
+        let mut y = 0;
+        for (ofs, len) in positions {
+            for i in y..ofs {
+                output(tokens.seq(i), Some(color), out)?;
+            }
+            for i in ofs..ofs + len {
+                output(tokens.seq(i), Some(color), out)?;
+            }
+            y = ofs + len;
+        }
+        for i in y..to_isize(tokens.nb_tokens()) {
+            output(tokens.seq(i), Some(color), out)?;
+        }
+        Ok(())
+    }
+
     fn process<Stream>(&mut self, out: &mut Stream) -> io::Result<()>
     where
-        Stream: termcolor::WriteColor,
+        Stream: WriteColor,
     {
         let Self {
             v,
@@ -131,10 +159,19 @@ impl HunkBuffer {
             added: Tokenization::new(added_lines, added_tokens),
         };
 
-        let _ = diff(&tokens, v, diff_buffer);
-
-        output(removed_lines, Some(Red), out)?;
-        output(added_lines, Some(Green), out)?;
+        diff(&tokens, v, diff_buffer);
+        Self::paint_lines(
+            &tokens.removed,
+            Red,
+            diff_buffer.iter().map(|s| (s.x0, s.len)),
+            out,
+        )?;
+        Self::paint_lines(
+            &tokens.added,
+            Green,
+            diff_buffer.iter().map(|s| (s.y0, s.len)),
+            out,
+        )?;
         added_lines.clear();
         removed_lines.clear();
         Ok(())
@@ -310,7 +347,7 @@ enum DiffKind {
 }
 
 impl DiffKind {
-    fn color(&self) -> Option<termcolor::Color> {
+    fn color(&self) -> Option<Color> {
         match self {
             Keep => None,
             Added => Some(Green),
@@ -681,9 +718,9 @@ fn is_alphanum(b: u8) -> bool {
     }
 }
 
-fn output<Stream>(buf: &[u8], color: Option<termcolor::Color>, out: &mut Stream) -> io::Result<()>
+fn output<Stream>(buf: &[u8], color: Option<Color>, out: &mut Stream) -> io::Result<()>
 where
-    Stream: termcolor::WriteColor,
+    Stream: WriteColor,
 {
     let mut i = 0;
     let len = buf.len();
