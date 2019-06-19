@@ -1,54 +1,18 @@
 use crate::DiffKind::*;
 use std::convert::TryFrom;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead};
 use termcolor::{
     Color,
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
-fn usage() -> ! {
-    eprintln!("usage:");
-    let process_name = std::env::args().next();
-    let process_name = match process_name {
-        Some(ref pn) => &pn[..],
-        None => "<0>",
-    };
-    eprintln!("\t{}: read from stdin", process_name);
-    eprintln!(
-        "\t{} --input <filename>: read input from file",
-        process_name
-    );
-    std::process::exit(1)
-}
-
-fn mk_reader<'a>(stdin: &'a io::Stdin) -> Box<BufRead + 'a> {
-    let mut args = std::env::args().skip(1);
-    match args.next().as_ref().map(|x| &**x) {
-        Some("--input") => {
-            if let Some(ref path) = args.next() {
-                let file = match File::open(path) {
-                    Ok(f) => f,
-                    Err(e) => panic!("error opening file {}: {}", &path, e),
-                };
-                let stdin = BufReader::new(file);
-                Box::new(stdin)
-            } else {
-                usage()
-            }
-        }
-        Some(_) => usage(),
-        None => Box::new(stdin.lock()),
-    }
-}
-
 fn main() -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
     let mut hunk_buffer = HunkBuffer::default();
-    let mut stdin = mk_reader(&stdin);
+    let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
 
     let mut time_computing_diff_ms = 0;
