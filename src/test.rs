@@ -83,8 +83,8 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     };
 
     let mut v = vec![];
-    let result = diff_sequences_simple(&input, &mut v, true);
-    let result_bwd = diff_sequences_simple(&input, &mut v, false);
+    let result = diff_sequences_simple_forward(&input, &mut v);
+    let result_bwd = diff_sequences_simple_backward(&input, &mut v);
     let result_bidi = diff_sequences_bidirectional(&input, &mut v);
     let result_r = diff_sequences_simple(&input_r, &mut v, true);
     let result_r_bwd = diff_sequences_simple(&input_r, &mut v, false);

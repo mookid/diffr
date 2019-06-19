@@ -58,7 +58,7 @@ fn main() -> io::Result<()> {
 }
 
 #[derive(Debug, Default)]
-struct DiffPair<T> {
+pub struct DiffPair<T> {
     added: T,
     removed: T,
 }
@@ -207,7 +207,7 @@ fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
 }
 
 #[derive(Debug)]
-struct Tokenization<'a> {
+pub struct Tokenization<'a> {
     data: &'a [u8],
     tokens: &'a [(usize, usize)],
     start_index: isize,
@@ -312,10 +312,9 @@ struct Diff {
     points: Vec<Point>,
 }
 
-struct DiffTraversal<'a> {
+pub struct DiffTraversal<'a> {
     v: &'a mut [isize],
     max: usize,
-    forward: bool,
     end: (isize, isize),
 }
 
@@ -328,12 +327,7 @@ impl<'a> DiffTraversal<'a> {
         );
         assert!(max * 2 + 1 <= v.len());
         let (start, end) = if forward { (start, end) } else { (end, start) };
-        let mut res = DiffTraversal {
-            v,
-            max,
-            forward,
-            end,
-        };
+        let mut res = DiffTraversal { v, max, end };
         if max != 0 {
             *res.v_mut(1) = start.0 - input.removed.start_index
         }
@@ -356,14 +350,6 @@ impl<'a> DiffTraversal<'a> {
 
     fn v_mut(&mut self, index: isize) -> &mut isize {
         &mut self.v[to_usize(index + to_isize(self.max))]
-    }
-}
-
-fn diff_sequences_kernel(input: &Tokens, ctx: &mut DiffTraversal, d: usize) -> Option<usize> {
-    if ctx.forward {
-        diff_sequences_kernel_forward(input, ctx, d)
-    } else {
-        diff_sequences_kernel_backward(input, ctx, d)
     }
 }
 
@@ -425,7 +411,7 @@ fn diff_sequences_kernel_backward(
 }
 
 #[derive(Clone, Debug, Default)]
-struct Snake {
+pub struct Snake {
     x0: isize,
     y0: isize,
     len: isize,
@@ -506,11 +492,25 @@ fn diff_sequences_kernel_bidirectional(
     None
 }
 
+pub fn diff_sequences_simple_forward(input: &Tokens, v: &mut Vec<isize>) -> usize {
+    diff_sequences_simple(input, v, true)
+}
+
+pub fn diff_sequences_simple_backward(input: &Tokens, v: &mut Vec<isize>) -> usize {
+    diff_sequences_simple(input, v, false)
+}
+
 fn diff_sequences_simple(input: &Tokens, v: &mut Vec<isize>, forward: bool) -> usize {
     let max_result = input.n() + input.m();
     let ctx = &mut DiffTraversal::from_vector(input, v, forward, max_result);
     (0..max_result)
-        .filter_map(|d| diff_sequences_kernel(input, ctx, d))
+        .filter_map(|d| {
+            if forward {
+                diff_sequences_kernel_forward(input, ctx, d)
+            } else {
+                diff_sequences_kernel_backward(input, ctx, d)
+            }
+        })
         .next()
         .unwrap_or(max_result)
 }
@@ -575,7 +575,7 @@ fn find_splitting_point(input: &Tokens) -> SplittingPoint {
     SplittingPoint { sp, dx, dy }
 }
 
-fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> usize {
+pub fn diff_sequences_bidirectional(input: &Tokens, v: &mut Vec<isize>) -> usize {
     if input.n() + input.m() == 0 {
         return 0;
     }
