@@ -1,4 +1,3 @@
-use crate::DiffKind::*;
 use std::convert::TryFrom;
 use std::io::{self, BufRead};
 use termcolor::{
@@ -313,92 +312,6 @@ struct Diff {
     points: Vec<Point>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DiffKind {
-    Keep,
-    Added,
-    Removed,
-}
-
-impl DiffKind {
-    fn color(&self) -> Option<Color> {
-        match self {
-            Keep => None,
-            Added => Some(Green),
-            Removed => Some(Red),
-        }
-    }
-}
-
-// The kind of diff and the size of the piece of diff
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct DiffPathItem(DiffKind, usize, usize, usize);
-
-impl DiffPathItem {
-    fn kind(&self) -> DiffKind {
-        self.0
-    }
-
-    fn len(&self) -> usize {
-        self.1
-    }
-
-    fn start_removed(&self) -> usize {
-        self.2
-    }
-
-    fn start_added(&self) -> usize {
-        self.3
-    }
-}
-
-struct Path<'a>(std::slice::Windows<'a, Point>);
-
-impl<'a> Path<'a> {
-    fn new(diff: &'a Diff) -> Self {
-        Path(diff.points.windows(2))
-    }
-}
-
-impl<'a> Iterator for Path<'a> {
-    type Item = DiffPathItem;
-    fn next(self: &mut Self) -> Option<Self::Item> {
-        self.0.next().map(|pair| {
-            let (x0, y0) = pair[0];
-            let (x1, y1) = pair[1];
-            let (kind, len) = match (x0 != x1, y0 != y1) {
-                (true, true) => (Keep, x1 - x0),
-                (false, true) => (Added, y1 - y0),
-                (true, false) => (Removed, x1 - x0),
-                (false, false) => panic!("invariant error: duplicate point"),
-            };
-            DiffPathItem(kind, len, x0, y0)
-        })
-    }
-}
-
-impl Diff {
-    fn new(points: Vec<(usize, usize)>) -> Diff {
-        Diff { points }
-    }
-
-    fn path(&self) -> Path {
-        return Path::new(&self);
-    }
-}
-
-fn aligned(z0: &Point, z1: &Point, z2: &Point) -> bool {
-    fn vector(z0: &Point, z1: &Point) -> (isize, isize) {
-        (
-            to_isize(z1.0) - to_isize(z0.0),
-            to_isize(z1.1) - to_isize(z0.1),
-        )
-    }
-    let v01 = vector(z0, z1);
-    let v02 = vector(z0, z2);
-    v01.0 * v02.1 == v01.1 * v02.0
-}
-
 struct DiffTraversal<'a> {
     v: &'a mut [isize],
     max: usize,
@@ -604,7 +517,6 @@ fn diff_sequences_simple(input: &Tokens, v: &mut Vec<isize>, forward: bool) -> u
 
 fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
     let n = input.n() as isize;
-    let m = input.m() as isize;
     fn trivial_diff(tok: &Tokenization) -> bool {
         tok.one_past_end_index <= tok.start_index
     }

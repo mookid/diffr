@@ -1,4 +1,22 @@
 use super::*;
+use DiffKind::*;
+
+// The kind of diff and the size of the piece of diff
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DiffPathItem(DiffKind, usize, usize, usize);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DiffKind {
+    Keep,
+    Added,
+    Removed,
+}
+
+impl DiffPathItem {
+    fn kind(&self) -> DiffKind {
+        self.0
+    }
+}
 
 fn string_of_bytes(buf: &[u8]) -> String {
     String::from_utf8_lossy(buf).into()
@@ -349,12 +367,6 @@ fn range_equality_test() {
 }
 
 #[test]
-fn aligned_test() {
-    assert!(aligned(&(1, 3), &(2, 2), &(3, 1)));
-    assert!(!aligned(&(1, 3), &(2, 2), &(3, 2)));
-}
-
-#[test]
 fn tokenize_test() {
     fn test(expected: &[&str], buf: &[u8]) {
         let mut tokens = vec![];
@@ -393,36 +405,6 @@ fn tokenize_test() {
     test(
         &["*", "(", "abcd", ")", " ", "#", "[", "efgh", "]"],
         b"*(abcd) #[efgh]",
-    );
-}
-
-#[test]
-fn color_test() {
-    assert_eq!(None, DiffKind::Keep.color());
-}
-
-#[test]
-fn path_test() {
-    fn test(expected: &[DiffPathItem], input: &[(usize, usize)]) {
-        assert_eq!(expected.to_vec(), mk_vec(Diff::new(input.to_vec()).path()));
-    }
-    test(
-        &[
-            DiffPathItem(Keep, 1, 0, 0),
-            DiffPathItem(Added, 2, 1, 1),
-            DiffPathItem(Removed, 4, 1, 3),
-        ],
-        &[(0, 0), (1, 1), (1, 3), (5, 3)],
-    );
-
-    test(
-        &[
-            DiffPathItem(Keep, 1, 0, 0),
-            DiffPathItem(Keep, 1, 1, 1),
-            DiffPathItem(Added, 1, 2, 2),
-            DiffPathItem(Removed, 3, 2, 3),
-        ],
-        &[(0, 0), (1, 1), (2, 2), (2, 3), (5, 3)],
     );
 }
 
