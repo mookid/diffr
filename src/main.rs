@@ -121,7 +121,6 @@ impl HunkBuffer {
             added_lines,
             removed_lines,
         } = self;
-        diff_buffer.clear();
         tokenize(removed_tokens, removed_lines);
         tokenize(added_tokens, added_lines);
 
@@ -515,7 +514,12 @@ fn diff_sequences_simple(input: &Tokens, v: &mut Vec<isize>, forward: bool) -> u
         .unwrap_or(max_result)
 }
 
-fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
+pub fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
+    dst.clear();
+    diff_rec(input, v, dst)
+}
+
+fn diff_rec(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
     let n = input.n() as isize;
     fn trivial_diff(tok: &Tokenization) -> bool {
         tok.one_past_end_index <= tok.start_index
@@ -529,11 +533,11 @@ fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
     let &Snake { x0, y0, len, d } = &snake;
     if 1 < d {
         let (input1, input2) = input.split_at((x0, y0), (x0 + len, y0 + len));
-        diff(&input1, v, dst);
+        diff_rec(&input1, v, dst);
         if len != 0 {
             dst.push(snake);
         }
-        diff(&input2, v, dst);
+        diff_rec(&input2, v, dst);
     } else {
         let SplittingPoint { sp, dx, dy } = find_splitting_point(&input);
         let x0 = input.removed.start_index;
