@@ -5,8 +5,7 @@ use std::io::{self, BufRead, BufReader};
 use termcolor::{
     Color,
     Color::{Green, Red},
-    ColorChoice, ColorSpec, StandardStream,
-    WriteColor,
+    ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
 fn usage() -> ! {
@@ -61,7 +60,7 @@ fn main() -> io::Result<()> {
         if buffer.is_empty() || starts_hunk(&buffer) {
             break;
         }
-        output(&buffer, None, &mut stdout)?;
+        output(&buffer, &ColorSpec::default(), &mut stdout)?;
         buffer.clear();
     }
 
@@ -78,7 +77,7 @@ fn main() -> io::Result<()> {
             _ => {
                 let start = std::time::SystemTime::now();
                 hunk_buffer.process(&mut stdout)?;
-                output(&buffer, None, &mut stdout)?;
+                output(&buffer, &ColorSpec::default(), &mut stdout)?;
                 time_computing_diff_ms += start.elapsed().unwrap().as_millis();
             }
         }
@@ -111,29 +110,38 @@ struct HunkBuffer {
     removed_lines: Vec<u8>,
 }
 
+fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
+    let mut colorspec: ColorSpec = ColorSpec::default();
+    colorspec.set_fg(fg);
+    colorspec.set_bg(bg);
+    colorspec.set_bold(bold);
+    colorspec
+}
+
 impl HunkBuffer {
     fn paint_lines<Stream, Positions>(
         tokens: &Tokenization,
-        color: Color,
+        color_no_highlight: &ColorSpec,
+        color_highlight: &ColorSpec,
         positions: Positions,
         out: &mut Stream,
     ) -> io::Result<()>
     where
         Stream: WriteColor,
-        Positions: Iterator<Item=(isize, isize)>
+        Positions: Iterator<Item = (isize, isize)>,
     {
         let mut y = 0;
         for (ofs, len) in positions {
             for i in y..ofs {
-                output(tokens.seq(i), Some(color), out)?;
+                output(tokens.seq(i), &color_highlight, out)?;
             }
             for i in ofs..ofs + len {
-                output(tokens.seq(i), Some(color), out)?;
+                output(tokens.seq(i), &color_no_highlight, out)?;
             }
             y = ofs + len;
         }
         for i in y..to_isize(tokens.nb_tokens()) {
-            output(tokens.seq(i), Some(color), out)?;
+            output(tokens.seq(i), &color_highlight, out)?;
         }
         Ok(())
     }
@@ -162,13 +170,15 @@ impl HunkBuffer {
         diff(&tokens, v, diff_buffer);
         Self::paint_lines(
             &tokens.removed,
-            Red,
+            &color_spec(Some(Red), None, false),
+            &color_spec(Some(Red), None, true),
             diff_buffer.iter().map(|s| (s.x0, s.len)),
             out,
         )?;
         Self::paint_lines(
             &tokens.added,
-            Green,
+            &color_spec(Some(Green), None, false),
+            &color_spec(Some(Green), None, true),
             diff_buffer.iter().map(|s| (s.y0, s.len)),
             out,
         )?;
@@ -718,7 +728,7 @@ fn is_alphanum(b: u8) -> bool {
     }
 }
 
-fn output<Stream>(buf: &[u8], color: Option<Color>, out: &mut Stream) -> io::Result<()>
+fn output<Stream>(buf: &[u8], colorspec: &ColorSpec, out: &mut Stream) -> io::Result<()>
 where
     Stream: WriteColor,
 {
@@ -731,7 +741,7 @@ where
         (&buf[..], len)
     };
     while i < len {
-        out.set_color(ColorSpec::default().set_fg(color))?;
+        out.set_color(colorspec)?;
         let buf = &buf[i..];
         let hi = index_of(buf.iter().cloned(), b'\n').unwrap_or(buf.len() - 1) + 1;
         out.write_all(&buf[..hi])?;
