@@ -37,6 +37,7 @@ fn main() -> io::Result<()> {
         match first_after_escape(&buffer) {
             Some(b'+') => hunk_buffer.push_added(&buffer),
             Some(b'-') => hunk_buffer.push_removed(&buffer),
+            Some(b' ') => add_raw_line(&mut hunk_buffer.lines, &buffer),
             _ => {
                 let start = std::time::SystemTime::now();
                 hunk_buffer.process(&mut stdout)?;
@@ -69,8 +70,7 @@ struct HunkBuffer {
     diff_buffer: Vec<Snake>,
     added_tokens: Vec<(usize, usize)>,
     removed_tokens: Vec<(usize, usize)>,
-    added_lines: Vec<u8>,
-    removed_lines: Vec<u8>,
+    lines: LineSplit,
 }
 
 fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
@@ -82,31 +82,31 @@ fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
 }
 
 impl HunkBuffer {
-    fn paint_lines<Stream, Positions>(
-        tokens: &Tokenization,
-        color_no_highlight: &ColorSpec,
-        color_highlight: &ColorSpec,
-        positions: Positions,
+    // Returns the number of printed shared tokens
+    fn paint_line<Stream, Positions>(
+        data: &[u8],
+        &(data_lo, data_hi): &(usize, usize),
+        no_highlight: &ColorSpec,
+        highlight: &ColorSpec,
+        shared: Positions,
         out: &mut Stream,
-    ) -> io::Result<()>
+    ) -> io::Result<usize>
     where
         Stream: WriteColor,
-        Positions: Iterator<Item = (isize, isize)>,
+        Positions: Iterator<Item = (usize, usize)>,
     {
-        let mut y = 0;
-        for (ofs, len) in positions {
-            for i in y..ofs {
-                output(tokens.seq(i), &color_highlight, out)?;
-            }
-            for i in ofs..ofs + len {
-                output(tokens.seq(i), &color_no_highlight, out)?;
-            }
-            y = ofs + len;
+        let mut y = data_lo;
+        let mut nshared = 0;
+        for (lo, hi) in shared {
+            nshared += 1;
+            output(&data[y..lo], &highlight, out)?;
+            output(&data[lo..hi], &no_highlight, out)?;
+            y = hi;
         }
-        for i in y..to_isize(tokens.nb_tokens()) {
-            output(tokens.seq(i), &color_highlight, out)?;
+        if y < data_hi {
+            output(&data[y..data_hi], &highlight, out)?;
         }
-        Ok(())
+        Ok(nshared)
     }
 
     fn process<Stream>(&mut self, out: &mut Stream) -> io::Result<()>
@@ -118,58 +118,103 @@ impl HunkBuffer {
             diff_buffer,
             added_tokens,
             removed_tokens,
-            added_lines,
-            removed_lines,
+            lines,
         } = self;
-        tokenize(removed_tokens, removed_lines);
-        tokenize(added_tokens, added_lines);
-
         let tokens = Tokens {
-            removed: Tokenization::new(removed_lines, removed_tokens),
-            added: Tokenization::new(added_lines, added_tokens),
+            removed: Tokenization::new(&lines.data, removed_tokens),
+            added: Tokenization::new(&lines.data, added_tokens),
         };
-
         diff(&tokens, v, diff_buffer);
-        Self::paint_lines(
-            &tokens.removed,
-            &color_spec(Some(Red), None, false),
-            &color_spec(Some(Red), None, true),
-            diff_buffer.iter().map(|s| (s.x0, s.len)),
-            out,
-        )?;
-        Self::paint_lines(
-            &tokens.added,
-            &color_spec(Some(Green), None, false),
-            &color_spec(Some(Green), None, true),
-            diff_buffer.iter().map(|s| (s.y0, s.len)),
-            out,
-        )?;
-        added_lines.clear();
-        removed_lines.clear();
+        let data = &lines.data;
+        let mut ishared_added = 0;
+        let mut ishared_removed = 0;
+        let added_nohighlight = color_spec(Some(Green), None, false);
+        let added_highlight = color_spec(Some(Green), None, true);
+        let removed_nohighlight = color_spec(Some(Red), None, false);
+        let removed_highlight = color_spec(Some(Red), None, true);
+        for (line_start, line_end) in lines.iter() {
+            let first = data[line_start];
+            match first {
+                b'-' | b'+' => {
+                    let is_plus = first == b'+';
+                    let (nohighlight, highlight, toks, i) = if is_plus {
+                        (
+                            &added_nohighlight,
+                            &added_highlight,
+                            &tokens.added,
+                            &mut ishared_added,
+                        )
+                    } else {
+                        (
+                            &removed_nohighlight,
+                            &removed_highlight,
+                            &tokens.removed,
+                            &mut ishared_removed,
+                        )
+                    };
+                    let data = toks.data;
+                    let shared = diff_buffer
+                        .iter()
+                        .skip(*i)
+                        // .filter(|s| s.len != 0)
+                        .map(|s| {
+                            let x0 = if is_plus { s.y0 } else { s.x0 };
+                            let (first, _) = toks.seq_index(x0);
+                            let (_, last) = toks.seq_index(x0 + s.len - 1);
+                            (first.max(line_start), last.min(line_end))
+                        })
+                        // .filter(|(first, last)| first < last)
+                        .take_while(|xy| xy.0 <= line_end);
+                    *i += Self::paint_line(
+                        &data,
+                        &(line_start, line_end),
+                        &nohighlight,
+                        &highlight,
+                        shared,
+                        out,
+                    )?;
+                    out.reset()?;
+                }
+                _ => output(&data[line_start..line_end], &ColorSpec::default(), out)?,
+            }
+        }
+        lines.clear();
+        added_tokens.clear();
+        removed_tokens.clear();
         Ok(())
     }
 
     fn push_added(&mut self, line: &[u8]) {
-        add_raw_line(&mut self.added_lines, line)
+        self.push_aux(line, true)
     }
 
     fn push_removed(&mut self, line: &[u8]) {
-        add_raw_line(&mut self.removed_lines, line)
+        self.push_aux(line, false)
+    }
+
+    fn push_aux(&mut self, line: &[u8], added: bool) {
+        let ofs = self.lines.len();
+        add_raw_line(&mut self.lines, line);
+        tokenize(
+            ofs,
+            if added {
+                &mut self.added_tokens
+            } else {
+                &mut self.removed_tokens
+            },
+            &self.lines.data[ofs..],
+        );
     }
 }
 
 // Scan buf looking for target, returning the index of its first
 // appearance.
-fn index_of<It>(it: It, target: u8) -> Option<usize>
-where
-    It: std::iter::Iterator<Item = u8>,
-{
-    // let mut it = buf.iter().enumerate();
-    let mut it = it.enumerate();
+fn index_of(buf: &[u8], target: u8) -> Option<usize> {
+    let mut it = buf.iter().enumerate();
     loop {
         match it.next() {
             Some((index, c)) => {
-                if c == target {
+                if *c == target {
                     return Some(index);
                 }
             }
@@ -194,13 +239,13 @@ fn skip_token(buf: &[u8]) -> usize {
     }
 }
 
-fn add_raw_line(dst: &mut Vec<u8>, line: &[u8]) {
+fn add_raw_line(dst: &mut LineSplit, line: &[u8]) {
     let mut i = 0;
     let len = line.len();
     while i < len {
         i += skip_all_escape_code(&line[i..]);
         let tok_len = skip_token(&line[i..]);
-        dst.extend_from_slice(&line[i..i + tok_len]);
+        dst.append_line(&line[i..i + tok_len]);
         i += tok_len;
     }
 }
@@ -246,8 +291,12 @@ impl<'a> Tokenization<'a> {
     }
 
     fn seq(&self, index: isize) -> &[u8] {
-        let (lo, hi) = self.tokens[to_usize(self.start_index + index)];
+        let (lo, hi) = self.seq_index(index);
         &self.data[lo..hi]
+    }
+
+    fn seq_index(&self, index: isize) -> (usize, usize) {
+        self.tokens[to_usize(self.start_index + index)]
     }
 }
 
@@ -287,20 +336,20 @@ impl<'a> Tokens<'a> {
     }
 }
 
-fn tokenize(tokens: &mut Vec<(usize, usize)>, src: &[u8]) {
-    tokens.clear();
+fn tokenize(ofs: usize, tokens: &mut Vec<(usize, usize)>, src: &[u8]) {
+    let mut push = |lo: usize, hi: usize| tokens.push((ofs + lo, ofs + hi));
     let mut lo = 0;
     for (hi, b) in src.iter().enumerate() {
         if !is_alphanum(*b) {
             if lo < hi {
-                tokens.push((lo, hi));
+                push(lo, hi);
             }
-            tokens.push((hi, hi + 1));
+            push(hi, hi + 1);
             lo = hi + 1
         }
     }
     if lo < src.len() {
-        tokens.push((lo, src.len()));
+        push(lo, src.len());
     }
 }
 
@@ -612,21 +661,14 @@ fn output<Stream>(buf: &[u8], colorspec: &ColorSpec, out: &mut Stream) -> io::Re
 where
     Stream: WriteColor,
 {
-    let mut i = 0;
-    let len = buf.len();
-    let ends_with_newline = len != 0 && buf[len - 1] == b'\n';
-    let (buf, len) = if ends_with_newline {
-        (&buf[..len - 1], len - 1)
+    let ends_with_newline = buf.last().cloned() == Some(b'\n');
+    let buf = if ends_with_newline {
+        &buf[..buf.len() - 1]
     } else {
-        (&buf[..], len)
+        buf
     };
-    while i < len {
-        out.set_color(colorspec)?;
-        let buf = &buf[i..];
-        let hi = index_of(buf.iter().cloned(), b'\n').unwrap_or(buf.len() - 1) + 1;
-        out.write_all(&buf[..hi])?;
-        i += hi;
-    }
+    out.set_color(colorspec)?;
+    out.write_all(&buf)?;
     out.reset()?;
     if ends_with_newline {
         out.write_all(b"\n")?;
@@ -650,10 +692,9 @@ fn first_after_escape(buf: &[u8]) -> Option<u8> {
 fn skip_all_escape_code(buf: &[u8]) -> usize {
     // Skip one sequence
     fn skip_escape_code(buf: &[u8]) -> Option<usize> {
-        let mut it = buf.iter().cloned();
-        if it.next()? == b'\x1b' && it.next()? == b'[' {
+        if 2 <= buf.len() && &buf[..2] == b"\x1b[" {
             // "\x1b[" + sequence body + "m" => 3 additional bytes
-            Some(index_of(it, b'm')? + 3)
+            Some(index_of(&buf[2..], b'm')? + 3)
         } else {
             None
         }
@@ -673,6 +714,68 @@ fn to_isize(input: usize) -> isize {
 
 fn to_usize(input: isize) -> usize {
     usize::try_from(input).unwrap()
+}
+
+#[derive(Debug, Default)]
+struct LineSplit {
+    data: Vec<u8>,
+    line_lens: Vec<usize>,
+}
+
+impl LineSplit {
+    fn iter(&self) -> LineSplitIter {
+        LineSplitIter {
+            line_split: &self,
+            index: 0,
+            start_of_slice: 0,
+        }
+    }
+
+    fn append_line(&mut self, line: &[u8]) {
+        if self.data.last().cloned() == Some(b'\n') {
+            self.line_lens.push(line.len());
+        } else {
+            match self.line_lens.last_mut() {
+                Some(len) => *len += line.len(),
+                None => self.line_lens.push(line.len()),
+            }
+        }
+        self.data.extend_from_slice(line)
+    }
+
+    fn clear(&mut self) {
+        self.data.clear();
+        self.line_lens.clear();
+    }
+
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+
+struct LineSplitIter<'a> {
+    line_split: &'a LineSplit,
+    start_of_slice: usize,
+    index: usize,
+}
+
+impl<'a> Iterator for LineSplitIter<'a> {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<Self::Item> {
+        let &mut LineSplitIter {
+            line_split: LineSplit { data: _, line_lens },
+            index,
+            start_of_slice,
+        } = self;
+        if index < line_lens.len() {
+            let len = line_lens[index];
+            self.start_of_slice += len;
+            self.index += 1;
+            Some((start_of_slice, start_of_slice + len))
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]

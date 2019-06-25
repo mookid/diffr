@@ -370,7 +370,7 @@ fn range_equality_test() {
 fn tokenize_test() {
     fn test(expected: &[&str], buf: &[u8]) {
         let mut tokens = vec![];
-        tokenize(&mut tokens, buf);
+        tokenize(0, &mut tokens, buf);
         assert_eq!(
             buf.len(),
             tokens.iter().map(|range| range.1 - range.0).sum()
@@ -554,4 +554,35 @@ fn test_lcs_random() {
 #[test]
 fn to_usize_checked_negative_test() {
     to_usize(-1_isize);
+}
+
+#[test]
+fn split_lines_test() {
+    let input: &[u8] = b"abcd\nefgh\nij";
+    let split = LineSplit {
+        data: input.to_vec(),
+        line_lens: vec![5, 5, 2],
+    };
+    check_split(input, &split)
+}
+
+#[test]
+fn split_lines_append_test() {
+    let input: &[u8] = b"abcd\nefgh\nij";
+    let mut split = LineSplit::default();
+    split.append_line(&input[..3]);
+    split.append_line(&input[3..6]);
+    split.append_line(&input[6..]);
+    check_split(input, &split)
+}
+
+fn check_split(input: &[u8], split: &LineSplit) {
+    assert_eq!(
+        input,
+        &*split.iter().fold(vec![], |acc, (lo, hi)| {
+            let mut acc = acc.clone();
+            acc.extend_from_slice(&input[lo..hi]);
+            acc
+        })
+    );
 }
