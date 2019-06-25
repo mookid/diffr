@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
+use std::hash::Hasher;
 use std::io::{self, BufRead};
 use termcolor::{
     Color,
@@ -62,8 +64,8 @@ pub struct DiffPair<T> {
 struct HunkBuffer {
     v: Vec<isize>,
     diff_buffer: Vec<Snake>,
-    added_tokens: Vec<(usize, usize)>,
-    removed_tokens: Vec<(usize, usize)>,
+    added_tokens: Vec<HashedSliceRef>,
+    removed_tokens: Vec<HashedSliceRef>,
     lines: LineSplit,
 }
 
@@ -247,13 +249,13 @@ fn add_raw_line(dst: &mut LineSplit, line: &[u8]) {
 #[derive(Debug)]
 pub struct Tokenization<'a> {
     data: &'a [u8],
-    tokens: &'a [(usize, usize)],
+    tokens: &'a [HashedSliceRef],
     start_index: isize,
     one_past_end_index: isize,
 }
 
 impl<'a> Tokenization<'a> {
-    fn new(data: &'a [u8], tokens: &'a [(usize, usize)]) -> Self {
+    fn new(data: &'a [u8], tokens: &'a [HashedSliceRef]) -> Self {
         Tokenization {
             data,
             tokens,
@@ -284,17 +286,35 @@ impl<'a> Tokenization<'a> {
         to_usize(self.one_past_end_index - self.start_index)
     }
 
-    fn seq(&self, index: isize) -> &[u8] {
-        let (lo, hi) = self.seq_index(index);
-        &self.data[lo..hi]
+    fn seq(&self, index: isize) -> HashedSlice {
+        let (lo, hi, h) = &self.tokens[to_usize(self.start_index + index)];
+        HashedSlice {
+            hash: *h,
+            data: &self.data[*lo..*hi],
+        }
     }
 
     fn seq_index(&self, index: isize) -> (usize, usize) {
-        self.tokens[to_usize(self.start_index + index)]
+        let (lo, hi, _) = self.tokens[to_usize(self.start_index + index)];
+        (lo, hi)
     }
 }
 
 type Tokens<'a> = DiffPair<Tokenization<'a>>;
+
+#[derive(PartialEq, Debug)]
+struct HashedSlice<'a> {
+    hash: u64,
+    data: &'a [u8],
+}
+
+fn hash_slice(data: &[u8]) -> u64 {
+    let mut s = DefaultHasher::new();
+    s.write(data);
+    s.finish()
+}
+
+type HashedSliceRef = (usize, usize, u64);
 
 impl<'a> Tokens<'a> {
     fn split_at(&self, (x0, y0): (isize, isize), (x1, y1): (isize, isize)) -> (Self, Self) {
@@ -321,12 +341,12 @@ impl<'a> Tokens<'a> {
         self.added.nb_tokens()
     }
 
-    fn seq_a(&self, index: isize) -> &[u8] {
-        &self.removed.seq(index)
+    fn seq_a(&self, index: isize) -> HashedSlice {
+        self.removed.seq(index)
     }
 
-    fn seq_b(&self, index: isize) -> &[u8] {
-        &self.added.seq(index)
+    fn seq_b(&self, index: isize) -> HashedSlice {
+        self.added.seq(index)
     }
 }
 
@@ -337,10 +357,10 @@ enum TokenKind {
     Spaces,
 }
 
-fn tokenize(ofs: usize, tokens: &mut Vec<(usize, usize)>, src: &[u8]) {
+fn tokenize(ofs: usize, tokens: &mut Vec<HashedSliceRef>, src: &[u8]) {
     let mut push = |lo: usize, hi: usize| {
         if lo < hi {
-            tokens.push((ofs + lo, ofs + hi))
+            tokens.push((ofs + lo, ofs + hi, hash_slice(&src[lo..hi])))
         }
     };
     let mut lo = 0;

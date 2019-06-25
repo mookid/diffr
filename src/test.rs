@@ -22,12 +22,11 @@ fn string_of_bytes(buf: &[u8]) -> String {
     String::from_utf8_lossy(buf).into()
 }
 
-fn to_strings(buf: &[u8], tokens: &[(usize, usize)]) -> Vec<String> {
-    mk_vec(
-        tokens
-            .iter()
-            .map(|range| string_of_bytes(&buf[range.0..range.1])),
-    )
+fn to_strings<It>(buf: &[u8], tokens: It) -> Vec<String>
+where
+    It: Iterator<Item = (usize, usize)>,
+{
+    mk_vec(tokens.map(|range| string_of_bytes(&buf[range.0..range.1])))
 }
 
 fn mk_vec<It, T>(it: It) -> Vec<T>
@@ -62,10 +61,10 @@ fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> 
     result
 }
 
-fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<(usize, usize)> {
+fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSliceRef> {
     let mut toks = vec![];
     for i in 0..data.len() {
-        toks.push((i, i + 1));
+        toks.push((i, i + 1, hash_slice(&data[i..i + 1])));
     }
     toks
 }
@@ -385,7 +384,8 @@ fn tokenize_test() {
         assert_eq!(&*expected, &*foo);
 
         // TODO
-        assert_eq!(expected, &to_strings(&buf, &tokens)[..]);
+        let tokens = tokens.iter().map(|(lo, hi, _)| (*lo, *hi));
+        assert_eq!(expected, &to_strings(&buf, tokens)[..]);
     }
     test(&[], b"");
     test(&[" "], b" ");
@@ -507,10 +507,10 @@ fn test_lcs_random() {
         let mut diff_lcs = vec![];
         for Snake { x0, y0, len, .. } in dst {
             let part_seq_a = (x0..x0 + len)
-                .flat_map(|idx| input.removed.seq(idx).iter().cloned())
+                .flat_map(|idx| input.removed.seq(idx).data.iter().cloned())
                 .collect::<Vec<_>>();
             let part_seq_b = (y0..y0 + len)
-                .flat_map(|idx| input.added.seq(idx).iter().cloned())
+                .flat_map(|idx| input.added.seq(idx).data.iter().cloned())
                 .collect::<Vec<_>>();
             assert_eq!(&*part_seq_a, &*part_seq_b);
             diff_lcs.extend_from_slice(&*part_seq_a);
