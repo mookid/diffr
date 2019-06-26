@@ -237,16 +237,6 @@ fn compress_path_test() {
 }
 
 #[test]
-fn starts_hunk_test() {
-    assert!(starts_hunk(b"@@@"));
-    assert!(starts_hunk(b"\x1b[42m@@@"));
-    assert!(starts_hunk(b"\x1b[42m\x1b[33m@@@"));
-    assert!(!starts_hunk(b"\x1c[42m@@@"));
-    assert!(!starts_hunk(b"\x1b[42m"));
-    assert!(!starts_hunk(b""));
-}
-
-#[test]
 fn skip_escape_code_test() {
     assert_eq!(5, skip_all_escape_code(b"\x1b[42m@@@"));
     assert_eq!(10, skip_all_escape_code(b"\x1b[42m\x1b[33m@@@"));

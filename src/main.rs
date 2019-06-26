@@ -13,19 +13,10 @@ fn main() -> io::Result<()> {
     let mut hunk_buffer = HunkBuffer::default();
     let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
+    let mut in_hunk = false;
 
     let mut time_computing_diff_ms = 0;
     let start = std::time::SystemTime::now();
-
-    // echo everything before the first diff hunk
-    loop {
-        stdin.read_until(b'\n', &mut buffer)?;
-        if buffer.is_empty() || starts_hunk(&buffer) {
-            break;
-        }
-        output(&buffer, &ColorSpec::default(), &mut stdout)?;
-        buffer.clear();
-    }
 
     // process hunks
     loop {
@@ -34,13 +25,16 @@ fn main() -> io::Result<()> {
             break;
         }
 
-        match first_after_escape(&buffer) {
-            Some(b'+') => hunk_buffer.push_added(&buffer),
-            Some(b'-') => hunk_buffer.push_removed(&buffer),
-            Some(b' ') => add_raw_line(&mut hunk_buffer.lines, &buffer),
-            _ => {
+        match (in_hunk, first_after_escape(&buffer)) {
+            (true, Some(b'+')) => hunk_buffer.push_added(&buffer),
+            (true, Some(b'-')) => hunk_buffer.push_removed(&buffer),
+            (true, Some(b' ')) => add_raw_line(&mut hunk_buffer.lines, &buffer),
+            (_, other) => {
                 let start = std::time::SystemTime::now();
-                hunk_buffer.process(&mut stdout)?;
+                if in_hunk {
+                    hunk_buffer.process(&mut stdout)?;
+                }
+                in_hunk = other == Some(b'@');
                 output(&buffer, &ColorSpec::default(), &mut stdout)?;
                 time_computing_diff_ms += start.elapsed().unwrap().as_millis();
             }
@@ -684,11 +678,6 @@ where
         out.write_all(b"\n")?;
     }
     Ok(())
-}
-
-// Detect if the line marks the beginning of a hunk.
-fn starts_hunk(buf: &[u8]) -> bool {
-    first_after_escape(buf) == Some(b'@')
 }
 
 // Detect if the line starts with exactly one of the given bytes, after escape
