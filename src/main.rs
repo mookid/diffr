@@ -336,21 +336,30 @@ impl<'a> Tokens<'a> {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum TokenKind {
+    Other,
+    Word,
+    Spaces,
+}
+
 fn tokenize(ofs: usize, tokens: &mut Vec<(usize, usize)>, src: &[u8]) {
-    let mut push = |lo: usize, hi: usize| tokens.push((ofs + lo, ofs + hi));
+    let mut push = |lo: usize, hi: usize| {
+        if lo < hi {
+            tokens.push((ofs + lo, ofs + hi))
+        }
+    };
     let mut lo = 0;
+    let mut kind = TokenKind::Other;
     for (hi, b) in src.iter().enumerate() {
-        if !is_alphanum(*b) {
-            if lo < hi {
-                push(lo, hi);
-            }
-            push(hi, hi + 1);
-            lo = hi + 1
+        let oldkind = kind;
+        kind = classify_byte(*b);
+        if kind != oldkind || oldkind == TokenKind::Other {
+            push(lo, hi);
+            lo = hi
         }
     }
-    if lo < src.len() {
-        push(lo, src.len());
-    }
+    push(lo, src.len());
 }
 
 type Point = (usize, usize);
@@ -650,10 +659,11 @@ fn diff_sequences_bidirectional_snake(input: &Tokens, v: &mut Vec<isize>) -> Sna
         .recenter(input.removed.start_index, input.added.start_index)
 }
 
-fn is_alphanum(b: u8) -> bool {
+fn classify_byte(b: u8) -> TokenKind {
     match b {
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => true,
-        _ => false,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' => TokenKind::Word,
+        b'\t' | b' ' => TokenKind::Spaces,
+        _ => TokenKind::Other,
     }
 }
 

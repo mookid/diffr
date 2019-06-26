@@ -402,6 +402,8 @@ fn tokenize_test() {
     test(&["a"], b"a");
     test(&["abcd", " ", "defg", " "], b"abcd defg ");
     test(&["abcd", " ", "defg"], b"abcd defg");
+    test(&["abcd", "    ", "defg"], b"abcd    defg");
+    test(&["abcd", "\t    ", "defg"], b"abcd\t    defg");
     test(
         &["*", "(", "abcd", ")", " ", "#", "[", "efgh", "]"],
         b"*(abcd) #[efgh]",
