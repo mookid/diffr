@@ -1,3 +1,4 @@
+use clap::App;
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::Hasher;
@@ -8,7 +9,36 @@ use termcolor::{
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
+const ABOUT: &str = "
+diffr adds word-level diff on top of unified diffs.
+word-level diff information is displayed using text attributes.";
+
+const USAGE: &str = "
+    diffr reads from standard input and write to standard output.
+
+    Typical usage is for interactive use of diff:
+    diff -u <file1> <file2> | diffr
+    git show | diffr";
+
+const TEMPLATE: &str = "\
+{bin} {version}
+{author}
+{about}
+
+USAGE:{usage}
+
+OPTIONS:
+{unified}";
+
 fn main() -> io::Result<()> {
+    let _matches = App::new("diffr")
+        .version("0.1.0")
+        .author("Nathan Moreau <nathan.moreau@m4x.org>")
+        .about(ABOUT)
+        .usage(USAGE)
+        .template(TEMPLATE)
+        .get_matches();
+
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
