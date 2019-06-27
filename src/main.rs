@@ -1,4 +1,4 @@
-use clap::App;
+use clap::{App, Arg};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::Hasher;
@@ -30,15 +30,19 @@ USAGE:{usage}
 OPTIONS:
 {unified}";
 
+const FLAG_DEBUG: &str = "debug";
+
 fn main() -> io::Result<()> {
-    let _matches = App::new("diffr")
+    let matches = App::new("diffr")
         .version("0.1.0")
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
         .usage(USAGE)
         .template(TEMPLATE)
+        .arg(Arg::with_name(FLAG_DEBUG).long("debug").hidden(true))
         .get_matches();
 
+    let debug = matches.is_present(FLAG_DEBUG);
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
@@ -48,7 +52,11 @@ fn main() -> io::Result<()> {
     let mut in_hunk = false;
 
     let mut time_computing_diff_ms = 0;
-    let start = std::time::SystemTime::now();
+    let start = if debug {
+        std::time::SystemTime::now()
+    } else {
+        std::time::UNIX_EPOCH
+    };
 
     // process hunks
     loop {
@@ -68,7 +76,9 @@ fn main() -> io::Result<()> {
                 }
                 in_hunk = other == Some(b'@');
                 output(&buffer, &ColorSpec::default(), &mut stdout)?;
-                time_computing_diff_ms += start.elapsed().unwrap().as_millis();
+                if debug {
+                    time_computing_diff_ms += start.elapsed().unwrap().as_millis();
+                }
             }
         }
         buffer.clear();
@@ -76,11 +86,13 @@ fn main() -> io::Result<()> {
 
     // flush remaining hunk
     hunk_buffer.process(&mut stdout)?;
-    eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
-    eprintln!(
-        "total processing time (ms): {}",
-        start.elapsed().unwrap().as_millis()
-    );
+    if debug {
+        eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
+        eprintln!(
+            "total processing time (ms): {}",
+            start.elapsed().unwrap().as_millis()
+        );
+    }
     Ok(())
 }
 
