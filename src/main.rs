@@ -32,7 +32,12 @@ OPTIONS:
 
 const FLAG_DEBUG: &str = "debug";
 
-fn main() -> io::Result<()> {
+#[derive(Debug)]
+struct AppConfig {
+    debug: bool,
+}
+
+fn main() {
     let matches = App::new("diffr")
         .version("0.1.0")
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
@@ -42,7 +47,20 @@ fn main() -> io::Result<()> {
         .arg(Arg::with_name(FLAG_DEBUG).long("debug").hidden(true))
         .get_matches();
 
-    let debug = matches.is_present(FLAG_DEBUG);
+    let config = AppConfig {
+        debug: matches.is_present(FLAG_DEBUG),
+    };
+    match try_main(&config) {
+        Ok(()) => (),
+        Err(ref err) if err.kind() == io::ErrorKind::BrokenPipe => (),
+        Err(ref err) => {
+            eprintln!("io error: {}", err);
+            std::process::exit(-1)
+        }
+    }
+}
+
+fn try_main(config: &AppConfig) -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
@@ -52,7 +70,7 @@ fn main() -> io::Result<()> {
     let mut in_hunk = false;
 
     let mut time_computing_diff_ms = 0;
-    let start = if debug {
+    let start = if config.debug {
         std::time::SystemTime::now()
     } else {
         std::time::UNIX_EPOCH
@@ -76,7 +94,7 @@ fn main() -> io::Result<()> {
                 }
                 in_hunk = other == Some(b'@');
                 output(&buffer, &ColorSpec::default(), &mut stdout)?;
-                if debug {
+                if config.debug {
                     time_computing_diff_ms += start.elapsed().unwrap().as_millis();
                 }
             }
@@ -86,7 +104,7 @@ fn main() -> io::Result<()> {
 
     // flush remaining hunk
     hunk_buffer.process(&mut stdout)?;
-    if debug {
+    if config.debug {
         eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
         eprintln!(
             "total processing time (ms): {}",
