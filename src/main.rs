@@ -229,7 +229,6 @@ impl HunkBuffer {
                         shared,
                         out,
                     )?;
-                    out.reset()?;
                 }
                 _ => output(&data[line_start..line_end], &ColorSpec::default(), out)?,
             }
