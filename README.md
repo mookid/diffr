@@ -28,7 +28,8 @@ and writes to stdout.
 
 #### To test it:
 ```
-git show HEAD | diffr
+cargo build --release
+git show HEAD | path/to/diffr
 ```
 
 #### To integrate it with git:
