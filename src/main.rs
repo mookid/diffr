@@ -3,6 +3,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::Hasher;
 use std::io::{self, BufRead};
+use std::time::SystemTime;
 use termcolor::{
     Color,
     Color::{Green, Red},
@@ -60,6 +61,29 @@ fn main() {
     }
 }
 
+fn now(debug: bool) -> Option<SystemTime> {
+    if debug {
+        Some(SystemTime::now())
+    } else {
+        None
+    }
+}
+
+fn duration_ms(time: &Option<SystemTime>) -> u128 {
+    if let Some(time) = time {
+        if let Ok(elapsed) = time.elapsed() {
+            elapsed.as_millis()
+        } else {
+            // some non monotonically increasing clock
+            // this is a short period of time anyway,
+            // let us map it to 0
+            0
+        }
+    } else {
+        0
+    }
+}
+
 fn try_main(config: &AppConfig) -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
@@ -70,11 +94,7 @@ fn try_main(config: &AppConfig) -> io::Result<()> {
     let mut in_hunk = false;
 
     let mut time_computing_diff_ms = 0;
-    let start = if config.debug {
-        std::time::SystemTime::now()
-    } else {
-        std::time::UNIX_EPOCH
-    };
+    let start = now(config.debug);
 
     // process hunks
     loop {
@@ -88,15 +108,13 @@ fn try_main(config: &AppConfig) -> io::Result<()> {
             (true, Some(b'-')) => hunk_buffer.push_removed(&buffer),
             (true, Some(b' ')) => add_raw_line(&mut hunk_buffer.lines, &buffer),
             (_, other) => {
-                let start = std::time::SystemTime::now();
+                let start = now(config.debug);
                 if in_hunk {
                     hunk_buffer.process(&mut stdout)?;
                 }
                 in_hunk = other == Some(b'@');
                 output(&buffer, &ColorSpec::default(), &mut stdout)?;
-                if config.debug {
-                    time_computing_diff_ms += start.elapsed().unwrap().as_millis();
-                }
+                time_computing_diff_ms += duration_ms(&start);
             }
         }
         buffer.clear();
@@ -106,10 +124,7 @@ fn try_main(config: &AppConfig) -> io::Result<()> {
     hunk_buffer.process(&mut stdout)?;
     if config.debug {
         eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
-        eprintln!(
-            "total processing time (ms): {}",
-            start.elapsed().unwrap().as_millis()
-        );
+        eprintln!("total processing time (ms): {}", duration_ms(&start));
     }
     Ok(())
 }
