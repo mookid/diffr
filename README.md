@@ -20,6 +20,7 @@ algorithm.
 
 ![Demo](screenshots/example_simple.png)
 ![Demo](screenshots/example_nonconsecutive.png)
+![Demo](screenshots/example_cross_lines_common_tokens.png)
 
 ### How to use it?
 
