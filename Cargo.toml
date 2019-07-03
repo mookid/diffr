@@ -10,3 +10,4 @@ debug = true
 [dependencies]
 termcolor = "1"
 clap = "2.33.0"
+atty = "0.2"

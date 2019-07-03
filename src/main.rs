@@ -9,6 +9,7 @@ use termcolor::{
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
+use atty::{is, Stream};
 
 const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
@@ -48,6 +49,10 @@ fn main() {
         .arg(Arg::with_name(FLAG_DEBUG).long("debug").hidden(true))
         .get_matches();
 
+    if is(Stream::Stdin) {
+        println!("{}", matches.usage());
+        std::process::exit(1)
+    }
     let config = AppConfig {
         debug: matches.is_present(FLAG_DEBUG),
     };
