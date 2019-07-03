@@ -22,6 +22,28 @@ algorithm.
 ![Demo](screenshots/example_nonconsecutive.png)
 ![Demo](screenshots/example_cross_lines_common_tokens.png)
 
+### Installation
+
+#### Arch Linux
+
+Install from the [AUR](https://aur.archlinux.org/packages/diffr/):
+
+```
+git clone https://aur.archlinux.org/diffr.git
+cd diffr
+makepkg -si
+```
+
+#### From Source
+
+You will need the [Rust compiler installed](https://www.rust-lang.org/tools/install).
+
+```
+git clone https://github.com/mookid/diffr.git
+cd diffr
+cargo install --path .
+```
+
 ### How to use it?
 
 diffr tries to be a well behaved unix program: it reads its input from stdin
