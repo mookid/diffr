@@ -1,3 +1,4 @@
+use atty::{is, Stream};
 use clap::{App, Arg};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
@@ -14,22 +15,12 @@ const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
 word-level diff information is displayed using text attributes.";
 
-const USAGE: &str = "
+const USAGE: &str = "\
     diffr reads from standard input and write to standard output.
 
     Typical usage is for interactive use of diff:
     diff -u <file1> <file2> | diffr
     git show | diffr";
-
-const TEMPLATE: &str = "\
-{bin} {version}
-{author}
-{about}
-
-USAGE:{usage}
-
-OPTIONS:
-{unified}";
 
 const FLAG_DEBUG: &str = "debug";
 
@@ -44,10 +35,13 @@ fn main() {
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
         .usage(USAGE)
-        .template(TEMPLATE)
         .arg(Arg::with_name(FLAG_DEBUG).long("debug").hidden(true))
         .get_matches();
 
+    if is(Stream::Stdin) {
+        println!("{}", matches.usage());
+        std::process::exit(-1)
+    }
     let config = AppConfig {
         debug: matches.is_present(FLAG_DEBUG),
     };
