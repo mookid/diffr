@@ -57,7 +57,7 @@ git show HEAD | path/to/diffr
 
 #### To integrate it with git:
 
-Add the following sectionto your `.gitconfig` file:
+Add the following section to your `.gitconfig` file:
 
 ```
 [pager]
