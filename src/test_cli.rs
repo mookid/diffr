@@ -77,7 +77,17 @@ fn color_invalid_attribute_name() {
     test_cli(ProcessTest {
         args: &["--colors", "added:bar"],
         out: Empty,
-        err: Exactly("parse error"),
+        err: AtLeast("unexpected attribute name: got 'bar', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline"),
+        is_success: false,
+    })
+}
+
+#[test]
+fn color_invalid_attribute_value() {
+    test_cli(ProcessTest {
+        args: &["--colors", "added:foreground:baz"],
+        out: Empty,
+        err: Exactly(""),
         is_success: false,
     })
 }

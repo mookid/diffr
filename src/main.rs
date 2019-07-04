@@ -115,16 +115,29 @@ enum FaceName {
     RefineRemoved,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum AttributeName {
+    Foreground,
+    Background,
+    Bold,
+    NoBold,
+    Intense,
+    NoIntense,
+    Underline,
+    NoUnderline,
+}
+
 #[derive(Debug)]
 enum ArgParsingError {
     FaceName(String),
+    AttributeName(String),
 }
 
 impl Display for ArgParsingError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtErr> {
         match self {
-            ArgParsingError::FaceName(input) =>
-                write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
+            ArgParsingError::FaceName(input) => write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
+            ArgParsingError::AttributeName(input) => write!(f, "unexpected attribute name: got '{}', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline", input),
         }
     }
 }
@@ -138,6 +151,23 @@ impl FromStr for FaceName {
             "removed" => Ok(FaceName::Removed),
             "refine-removed" => Ok(FaceName::RefineRemoved),
             other => Err(ArgParsingError::FaceName(other.to_owned())),
+        }
+    }
+}
+
+impl FromStr for AttributeName {
+    type Err = ArgParsingError;
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input {
+            "foreground" => Ok(AttributeName::Foreground),
+            "background" => Ok(AttributeName::Background),
+            "bold" => Ok(AttributeName::Bold),
+            "nobold" => Ok(AttributeName::NoBold),
+            "intense" => Ok(AttributeName::Intense),
+            "nointense" => Ok(AttributeName::NoIntense),
+            "underline" => Ok(AttributeName::Underline),
+            "nounderline" => Ok(AttributeName::NoUnderline),
+            other => Err(ArgParsingError::AttributeName(other.to_owned())),
         }
     }
 }
@@ -157,7 +187,6 @@ fn main() {
                 // TODO: help
                 .value_name("COLORFORHELP")
                 .takes_value(true)
-                .multiple(true)
                 .help("Set color")
 
                 // TODO: help
@@ -169,7 +198,7 @@ fn main() {
     // dbg!(matches.values_of(FLAG_COLOR).unwrap().collect::<Vec<_>>());
     let mut config = AppConfig::default();
 
-    if let Some(values) = matches.values_of(FLAG_COLOR) {
+    if let Some(values) = dbg!(matches.values_of(FLAG_COLOR)) {
         if let Err(err) = parse_color_args(&mut config, values) {
             eprintln!("{}", err);
             std::process::exit(-1)
@@ -196,17 +225,47 @@ where
         if let Some(p) = pieces.next().map(|s| s.parse::<FaceName>()) {
             dbg!(&p);
             match p {
-                Err(err) =>
-                    // return Err(format!("error parsing {} flag: {}", FLAG_COLOR, err)),
-                    return Err(err),
+                Err(err) => {
+                // return Err(format!("error parsing {} flag: {}", FLAG_COLOR, err)),
+                    dbg!(&err);
+                    return Err(err)
+                }
                 Ok(value) => {
-                    dbg!(value);
-                    ()
+                    let face_name : FaceName = dbg!(value);
+                    if let Err(err) = parse_color_attributes(config, pieces, face_name) {
+                        return Err(err)
+                    }
                 }
             }
             // if let Some(err@Err(_)) = p
             // return Err("FOO");
         }
+    }
+    Ok(())
+}
+
+fn parse_color_attributes<'a, Values>(config: &mut AppConfig, values: Values, face_name: FaceName) -> Result<(), ArgParsingError>
+where
+    Values: Iterator<Item = &'a str>,
+{
+    // dbg!(values.collect::<Vec<_>>());
+    let mut attribute_name : Option<AttributeName> = None;
+    for value in values {
+        match attribute_name {
+            None => {
+                // expect attribute_name
+                match value.parse::<AttributeName>() {
+                    Err(err) => return Err(err),
+                    Ok(name) => attribute_name = Some(name),
+                }
+            }
+            Some(attribute_name) => {
+
+            }
+        }
+        // if let Err(err) = value.parse::<AttributeName>() {
+        //     return Err(err)
+        // }
     }
     Ok(())
 }
