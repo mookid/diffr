@@ -1,14 +1,17 @@
 use clap::{App, Arg};
 use std::collections::hash_map::DefaultHasher;
-use std::convert::TryFrom;
+use std::convert::{From, TryFrom};
+use std::fmt::{Debug, Error as FmtErr, Formatter};
 use std::hash::Hasher;
 use std::io::{self, BufRead};
+use std::str::FromStr;
 use std::time::SystemTime;
 use termcolor::{
     Color,
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
+use std::fmt::Display;
 
 const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
@@ -31,11 +34,112 @@ USAGE:{usage}
 OPTIONS:
 {unified}";
 
-const FLAG_DEBUG: &str = "debug";
+const FLAG_DEBUG: &str = "--debug";
+const FLAG_COLOR: &str = "--colors";
+
+// supported color attributes
+// initial version is isomorphic to ColorSpec
+#[derive(Debug, Default)]
+struct ColorDescription {
+    fg: Option<Color>,
+    bg: Option<Color>,
+    bold: bool,
+    intense: bool,
+    underline: bool,
+}
+
+impl ColorDescription {
+    fn fg(mut self, fg: Option<Color>) -> Self {
+        self.fg = fg;
+        self
+    }
+    fn bg(mut self, bg: Option<Color>) -> Self {
+        self.bg = bg;
+        self
+    }
+    fn bold(mut self, bold: bool) -> Self {
+        self.bold = bold;
+        self
+    }
+    fn intense(mut self, intense: bool) -> Self {
+        self.intense = intense;
+        self
+    }
+    fn underline(mut self, underline: bool) -> Self {
+        self.underline = underline;
+        self
+    }
+}
+
+impl From<ColorDescription> for ColorSpec {
+    fn from(descr: ColorDescription) -> Self {
+        let mut result = ColorSpec::default();
+        result.set_fg(descr.fg);
+        result.set_bg(descr.bg);
+        result.set_bold(descr.bold);
+        result.set_intense(descr.intense);
+        result.set_underline(descr.underline);
+        result
+    }
+}
 
 #[derive(Debug)]
 struct AppConfig {
     debug: bool,
+    refine_added_face: ColorSpec,
+    refine_removed_face: ColorSpec,
+    removed_face: ColorSpec,
+    added_face: ColorSpec,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        fn cd() -> ColorDescription {
+            ColorDescription::default()
+        };
+        AppConfig {
+            debug: false,
+            refine_added_face: cd().bg(Some(Green)).bold(true).into(),
+            refine_removed_face: cd().bg(Some(Red)).bold(true).into(),
+            removed_face: cd().fg(Some(Red)).into(),
+            added_face: cd().fg(Some(Green)).into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum FaceName {
+    Added,
+    RefineAdded,
+    Removed,
+    RefineRemoved,
+}
+
+#[derive(Debug)]
+enum ArgParsingError {
+    FaceName(String),
+}
+
+impl Display for ArgParsingError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtErr> {
+        match self {
+            ArgParsingError::FaceName(input) =>
+                write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
+        }
+    }
+}
+
+impl FromStr for FaceName {
+    type Err = ArgParsingError;
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input {
+            "added" => Ok(FaceName::Added),
+            "refine-added" => Ok(FaceName::RefineAdded),
+            "removed" => Ok(FaceName::Removed),
+            "refine-removed" => Ok(FaceName::RefineRemoved),
+            other => Err(ArgParsingError::FaceName(other.to_owned())),
+        }
+    }
 }
 
 fn main() {
@@ -45,13 +149,34 @@ fn main() {
         .about(ABOUT)
         .usage(USAGE)
         .template(TEMPLATE)
-        .arg(Arg::with_name(FLAG_DEBUG).long("debug").hidden(true))
+        .arg(Arg::with_name(FLAG_DEBUG).long(FLAG_DEBUG).hidden(true))
+        .arg(
+            Arg::with_name(FLAG_COLOR)
+                .long(FLAG_COLOR)
+
+                // TODO: help
+                .value_name("COLORFORHELP")
+                .takes_value(true)
+                .multiple(true)
+                .help("Set color")
+
+                // TODO: help
+                .long_help("syntax is...."),
+        )
         .get_matches();
 
-    let config = AppConfig {
-        debug: matches.is_present(FLAG_DEBUG),
-    };
-    match try_main(&config) {
+    // dbg!(&matches);
+    // dbg!(matches.values_of(FLAG_COLOR).unwrap().collect::<Vec<_>>());
+    let mut config = AppConfig::default();
+
+    if let Some(values) = matches.values_of(FLAG_COLOR) {
+        if let Err(err) = parse_color_args(&mut config, values) {
+            eprintln!("{}", err);
+            std::process::exit(-1)
+        }
+    }
+
+    match try_main(config) {
         Ok(()) => (),
         Err(ref err) if err.kind() == io::ErrorKind::BrokenPipe => (),
         Err(ref err) => {
@@ -59,6 +184,31 @@ fn main() {
             std::process::exit(-1)
         }
     }
+}
+
+fn parse_color_args<'a, Values>(config: &mut AppConfig, values: Values) -> Result<(), ArgParsingError>
+where
+    Values: Iterator<Item = &'a str>,
+{
+    for value in values {
+        dbg!(&value);
+        let mut pieces = value.split(':');
+        if let Some(p) = pieces.next().map(|s| s.parse::<FaceName>()) {
+            dbg!(&p);
+            match p {
+                Err(err) =>
+                    // return Err(format!("error parsing {} flag: {}", FLAG_COLOR, err)),
+                    return Err(err),
+                Ok(value) => {
+                    dbg!(value);
+                    ()
+                }
+            }
+            // if let Some(err@Err(_)) = p
+            // return Err("FOO");
+        }
+    }
+    Ok(())
 }
 
 fn now(debug: bool) -> Option<SystemTime> {
@@ -84,7 +234,7 @@ fn duration_ms(time: &Option<SystemTime>) -> u128 {
     }
 }
 
-fn try_main(config: &AppConfig) -> io::Result<()> {
+fn try_main(config: AppConfig) -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
@@ -94,7 +244,9 @@ fn try_main(config: &AppConfig) -> io::Result<()> {
     let mut in_hunk = false;
 
     let mut time_computing_diff_ms = 0;
-    let start = now(config.debug);
+    let debug = config.debug;
+    hunk_buffer.config = config;
+    let start = now(debug);
 
     // process hunks
     loop {
@@ -108,7 +260,7 @@ fn try_main(config: &AppConfig) -> io::Result<()> {
             (true, Some(b'-')) => hunk_buffer.push_removed(&buffer),
             (true, Some(b' ')) => add_raw_line(&mut hunk_buffer.lines, &buffer),
             (_, other) => {
-                let start = now(config.debug);
+                let start = now(debug);
                 if in_hunk {
                     hunk_buffer.process(&mut stdout)?;
                 }
@@ -122,7 +274,7 @@ fn try_main(config: &AppConfig) -> io::Result<()> {
 
     // flush remaining hunk
     hunk_buffer.process(&mut stdout)?;
-    if config.debug {
+    if debug {
         eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
         eprintln!("total processing time (ms): {}", duration_ms(&start));
     }
@@ -142,14 +294,7 @@ struct HunkBuffer {
     added_tokens: Vec<HashedSliceRef>,
     removed_tokens: Vec<HashedSliceRef>,
     lines: LineSplit,
-}
-
-fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
-    let mut colorspec: ColorSpec = ColorSpec::default();
-    colorspec.set_fg(fg);
-    colorspec.set_bg(bg);
-    colorspec.set_bold(bold);
-    colorspec
+    config: AppConfig,
 }
 
 impl HunkBuffer {
@@ -190,6 +335,7 @@ impl HunkBuffer {
             added_tokens,
             removed_tokens,
             lines,
+            config,
         } = self;
         let tokens = Tokens {
             removed: Tokenization::new(&lines.data, removed_tokens),
@@ -199,10 +345,6 @@ impl HunkBuffer {
         let data = &lines.data;
         let mut ishared_added = 0;
         let mut ishared_removed = 0;
-        let added_nohighlight = color_spec(Some(Green), None, false);
-        let added_highlight = color_spec(None, Some(Green), true);
-        let removed_nohighlight = color_spec(Some(Red), None, false);
-        let removed_highlight = color_spec(None, Some(Red), true);
         for (line_start, line_end) in lines.iter() {
             let first = data[line_start];
             match first {
@@ -210,15 +352,15 @@ impl HunkBuffer {
                     let is_plus = first == b'+';
                     let (nohighlight, highlight, toks, i) = if is_plus {
                         (
-                            &added_nohighlight,
-                            &added_highlight,
+                            &config.added_face,
+                            &config.refine_added_face,
                             &tokens.added,
                             &mut ishared_added,
                         )
                     } else {
                         (
-                            &removed_nohighlight,
-                            &removed_highlight,
+                            &config.removed_face,
+                            &config.refine_removed_face,
                             &tokens.removed,
                             &mut ishared_removed,
                         )
@@ -873,3 +1015,6 @@ impl<'a> Iterator for LineSplitIter<'a> {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod test_cli;
