@@ -12,8 +12,8 @@ using text attributes.
 
 It works hunk by hunk, recomputing the diff on a word-by-word basis.
 
-The current implementation uses 
-[Myers longest common subsequence](http://www.xmailserver.org/diff2.pdf) 
+The current implementation uses
+[Myers longest common subsequence](http://www.xmailserver.org/diff2.pdf)
 algorithm.
 
 ### Screenshots
@@ -57,7 +57,7 @@ git show HEAD | path/to/diffr
 
 #### To integrate it with git:
 
-Add the following sectionto your `.gitconfig` file:
+Add the following section to your `.gitconfig` file:
 
 ```
 [pager]
