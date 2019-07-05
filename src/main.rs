@@ -182,14 +182,49 @@ fn main() {
         .arg(
             Arg::with_name(FLAG_COLOR)
                 .long(FLAG_COLOR)
-                // TODO: help
-                .value_name("COLORFORHELP")
+                .value_name("COLOR_SPEC")
                 .takes_value(true)
                 .multiple(true)
                 .number_of_values(1)
-                .help("Set color")
-                // TODO: help
-                .long_help("syntax is...."),
+                .help("Configure color settings.")
+                .long_help(
+                    "Configure color settings for console ouput.
+
+There are four faces to customize:
++----------------+--------------+----------------+
+|  line prefix   |      +       |       -        |
++----------------+--------------+----------------+
+| common segment |    added     |    removed     |
+| unique segment | refine-added | refine-removed |
++----------------+--------------+----------------+
+
+The customization allows
+- to change the foreground or background color;
+- to set or unset the attributes 'bold', 'intense', 'underline'.
+
+Customization is done passing a color_spec argument.
+This flag may be provided multiple times.
+
+The syntax is the following:
+
+color_spec = face-name + ':' + attributes
+attributes = <empty>
+           | attribute + ':' + attributes
+attribute  = ('foreground' | 'background') + ':' + color
+           | (<empty> | 'no') + ('bold' | 'intense' | 'underline')
+color      = 'none'
+           | [0-255]
+           | [0-255] + ',' + [0-255] + ',' + [0-255]
+           | ('black', 'blue', 'green', 'red',
+              'cyan', 'magenta', 'yellow', 'white')
+
+For example, the color_spec
+
+    'refine-added:background:blue:bold'
+
+sets the color of unique added segments with
+a blue background, written with a bold font.",
+                ),
         )
         .get_matches();
 
