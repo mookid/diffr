@@ -256,17 +256,9 @@ where
 {
     for value in values {
         let mut pieces = value.split(':');
-        if let Some(p) = pieces.next().map(|s| s.parse::<FaceName>()) {
-            match p {
-                Err(err) => {
-                    return Err(err);
-                }
-                Ok(face_name) => {
-                    if let Err(err) = parse_color_attributes(config, pieces, face_name) {
-                        return Err(err);
-                    }
-                }
-            }
+        if let Some(piece) = pieces.next() {
+            let face_name = piece.parse::<FaceName>()?;
+            parse_color_attributes(config, pieces, face_name)?;
         }
     }
     Ok(())
@@ -285,45 +277,43 @@ where
     let face = face_name.get_face_mut(config);
     for value in values {
         match attribute_name {
-            None => {
-                // expect attribute_name
-                match value.parse::<AttributeName>() {
-                    Err(err) => return Err(err),
-                    Ok(Foreground) => attribute_name = Some(Foreground),
-                    Ok(Background) => attribute_name = Some(Background),
-                    Ok(Bold) => {
-                        face.set_bold(true);
+            None => match value.parse::<AttributeName>()? {
+                Foreground => attribute_name = Some(Foreground),
+                Background => attribute_name = Some(Background),
+                Bold => {
+                    face.set_bold(true);
+                }
+                NoBold => {
+                    face.set_bold(false);
+                }
+                Intense => {
+                    face.set_intense(true);
+                }
+                NoIntense => {
+                    face.set_intense(false);
+                }
+                Underline => {
+                    face.set_underline(true);
+                }
+                NoUnderline => {
+                    face.set_underline(false);
+                }
+            },
+
+            Some(name_value) => {
+                let ColorOpt(color) = value.parse::<ColorOpt>()?;
+                match name_value {
+                    Foreground => {
+                        face.set_fg(color);
+                        attribute_name = None;
                     }
-                    Ok(NoBold) => {
-                        face.set_bold(false);
+                    Background => {
+                        face.set_bg(color);
+                        attribute_name = None;
                     }
-                    Ok(Intense) => {
-                        face.set_intense(true);
-                    }
-                    Ok(NoIntense) => {
-                        face.set_intense(false);
-                    }
-                    Ok(Underline) => {
-                        face.set_underline(true);
-                    }
-                    Ok(NoUnderline) => {
-                        face.set_underline(false);
-                    }
+                    _ => return Err(ArgParsingError::Unknown),
                 }
             }
-
-            Some(name_value) => match (value.parse::<ColorOpt>(), name_value) {
-                (Err(err), _) => return Err(err),
-                (Ok(color), Foreground) => {
-                    face.set_fg(color.0);
-                    attribute_name = None;
-                }
-                (Ok(color), Background) => {
-                    face.set_bg(color.0);
-                    attribute_name = None;
-                }
-                _ => return Err(ArgParsingError::Unknown),
-            },
         }
     }
     if attribute_name.is_some() {
