@@ -167,6 +167,7 @@ enum AttributeName {
     NoIntense,
     Underline,
     NoUnderline,
+    Reset,
 }
 
 impl EnumString for AttributeName {
@@ -181,6 +182,7 @@ impl EnumString for AttributeName {
             (NoIntense, "nointense"),
             (Underline, "underline"),
             (NoUnderline, "nounderline"),
+            (Reset, "none"),
         ]
     }
 }
@@ -253,7 +255,8 @@ There are four faces to customize:
 
 The customization allows
 - to change the foreground or background color;
-- to set or unset the attributes 'bold', 'intense', 'underline'.
+- to set or unset the attributes 'bold', 'intense', 'underline';
+- to clear all attributes.
 
 Customization is done passing a color_spec argument.
 This flag may be provided multiple times.
@@ -265,6 +268,7 @@ attributes = <empty>
            | attribute + ':' + attributes
 attribute  = ('foreground' | 'background') + ':' + color
            | (<empty> | 'no') + ('bold' | 'intense' | 'underline')
+           | 'none'
 color      = 'none'
            | [0-255]
            | [0-255] + ',' + [0-255] + ',' + [0-255]
@@ -350,6 +354,7 @@ where
             NoIntense => ignore(face.set_intense(false)),
             Underline => ignore(face.set_underline(true)),
             NoUnderline => ignore(face.set_underline(false)),
+            Reset => *face = Default::default(),
         }
     }
     Ok(())
