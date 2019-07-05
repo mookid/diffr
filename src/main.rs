@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::time::SystemTime;
 use termcolor::{
     Color,
-    Color::{Green, Red},
+    Color::{Green, Red, Rgb},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
@@ -48,12 +48,22 @@ struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        AppConfig {
-            debug: false,
-            added_face: color_spec(Some(Green), None, false),
-            refine_added_face: color_spec(None, Some(Green), true),
-            removed_face: color_spec(Some(Red), None, false),
-            refine_removed_face: color_spec(None, Some(Red), true),
+        if cfg!(windows) {
+            AppConfig {
+                debug: false,
+                added_face: color_spec(Some(Green), None, false),
+                refine_added_face: color_spec(None, Some(Green), true),
+                removed_face: color_spec(Some(Red), None, false),
+                refine_removed_face: color_spec(None, Some(Red), true),
+            }
+        } else {
+            AppConfig {
+                debug: false,
+                added_face: color_spec(Some(Rgb(0x33, 0x55, 0x33)), None, false),
+                refine_added_face: color_spec(Some(Rgb(0x22, 0xAA, 0x22)), None, false),
+                removed_face: color_spec(Some(Rgb(0x55, 0x33, 0x33)), None, false),
+                refine_removed_face: color_spec(Some(Rgb(0xAA, 0x22, 0x22)), None, false),
+            }
         }
     }
 }
