@@ -67,13 +67,13 @@ enum FaceName {
 }
 
 impl EnumString for FaceName {
-    fn data() -> &'static [(&'static Self, &'static str)] {
+    fn data() -> &'static [(Self, &'static str)] {
         use FaceName::*;
         &[
-            (&Added, "added"),
-            (&RefineAdded, "refine-added"),
-            (&Removed, "removed"),
-            (&RefineRemoved, "refine-removed"),
+            (Added, "added"),
+            (RefineAdded, "refine-added"),
+            (Removed, "removed"),
+            (RefineRemoved, "refine-removed"),
         ]
     }
 }
@@ -120,7 +120,7 @@ impl FromStr for ColorOpt {
 }
 
 trait EnumString: Copy {
-    fn data() -> &'static [(&'static Self, &'static str)];
+    fn data() -> &'static [(Self, &'static str)];
 }
 
 fn join<'a, It>(it: It, sep: &'a str) -> String
@@ -148,7 +148,6 @@ where
         .iter()
         .find(|p| p.1 == input)
         .map(|&p| p.0)
-        .cloned()
         .ok_or_else(|| {
             format!(
                 "got '{}', expected {}",
@@ -171,17 +170,17 @@ enum AttributeName {
 }
 
 impl EnumString for AttributeName {
-    fn data() -> &'static [(&'static Self, &'static str)] {
+    fn data() -> &'static [(Self, &'static str)] {
         use AttributeName::*;
         &[
-            (&Foreground, "foreground"),
-            (&Background, "background"),
-            (&Bold, "bold"),
-            (&NoBold, "nobold"),
-            (&Intense, "intense"),
-            (&NoIntense, "nointense"),
-            (&Underline, "underline"),
-            (&NoUnderline, "nounderline"),
+            (Foreground, "foreground"),
+            (Background, "background"),
+            (Bold, "bold"),
+            (NoBold, "nobold"),
+            (Intense, "intense"),
+            (NoIntense, "nointense"),
+            (Underline, "underline"),
+            (NoUnderline, "nounderline"),
         ]
     }
 }
