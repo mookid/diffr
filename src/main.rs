@@ -185,6 +185,8 @@ fn main() {
                 // TODO: help
                 .value_name("COLORFORHELP")
                 .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
                 .help("Set color")
                 // TODO: help
                 .long_help("syntax is...."),
