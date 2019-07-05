@@ -111,3 +111,23 @@ fn color_invalid_color_value_rgb() {
         is_success: false,
     })
 }
+
+#[test]
+fn color_invalid_color_not_done() {
+    test_cli(ProcessTest {
+        args: &["--colors", "added:foreground"],
+        out: Empty,
+        err: AtLeast("error parsing color: missing color value for face 'added'"),
+        is_success: false,
+    })
+}
+
+#[test]
+fn color_ok() {
+    test_cli(ProcessTest {
+        args: &["--colors", "added:foreground:0"],
+        out: Empty,
+        err: AtLeast(""),
+        is_success: true,
+    })
+}

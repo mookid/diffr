@@ -115,6 +115,18 @@ enum FaceName {
     RefineRemoved,
 }
 
+impl Display for FaceName {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtErr> {
+        use FaceName::*;
+        match self {
+            Added => write!(f, "added"),
+            RefineAdded => write!(f, "refine-added"),
+            Removed => write!(f, "removed"),
+            RefineRemoved => write!(f, "refine-removed"),
+        }
+    }
+}
+
 impl FaceName {
     fn get_face_mut<'a, 'b>(&'a self, config: &'b mut AppConfig) -> &'b mut ColorSpec {
         use FaceName::*;
@@ -138,7 +150,7 @@ impl FromStr for ColorOpt {
         } else {
             match input.parse() {
                 Ok(color) => Ok(ColorOpt(Some(color))),
-                Err(err) => Err(ArgParsingError::Color(format!("{}", err)))
+                Err(err) => Err(ArgParsingError::Color(format!("{}", err))),
             }
         }
     }
@@ -161,6 +173,7 @@ enum ArgParsingError {
     FaceName(String),
     AttributeName(String),
     Color(String),
+    MissingValue(FaceName),
     Unknown,
 }
 
@@ -171,6 +184,7 @@ impl Display for ArgParsingError {
             FaceName(input) => write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
             AttributeName(input) => write!(f, "unexpected attribute name: got '{}', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline", input),
             Color(err) => write!(f, "unexpected color value: {}", err),
+            MissingValue(face_name) => write!(f, "error parsing color: missing color value for face '{}'", face_name),
             Unknown => write!(f, "Internal error"),
         }
     }
@@ -320,25 +334,22 @@ where
                 }
             }
 
-            Some(attribute_name) => {
-                match (value.parse::<ColorOpt>(), attribute_name) {
-                    (Err(err), _) => return Err(err),
-                    (Ok(color), Foreground) => {
-                        face.set_fg(color.0);
-                    }
-                    (Ok(color), Background) => {
-                        face.set_bg(color.0);
-                    }
-                    _ => return Err(ArgParsingError::Unknown)
+            Some(name_value) => match (value.parse::<ColorOpt>(), name_value) {
+                (Err(err), _) => return Err(err),
+                (Ok(color), Foreground) => {
+                    face.set_fg(color.0);
+                    attribute_name = None;
                 }
-            }
+                (Ok(color), Background) => {
+                    face.set_bg(color.0);
+                    attribute_name = None;
+                }
+                _ => return Err(ArgParsingError::Unknown),
+            },
         }
-        // if let Err(err) = value.parse::<AttributeName>() {
-        //     return Err(err)
-        // }
     }
     if attribute_name.is_some() {
-        return Err(panic!("TODO: add new error case"));
+        return Err(ArgParsingError::MissingValue(face_name));
     }
     Ok(())
 }
