@@ -264,6 +264,8 @@ where
     Ok(())
 }
 
+fn ignore<T>(_: T) {}
+
 fn parse_color_attributes<'a, Values>(
     config: &mut AppConfig,
     mut values: Values,
@@ -289,24 +291,12 @@ where
                     return Err(ArgParsingError::MissingValue(face_name));
                 }
             }
-            Bold => {
-                face.set_bold(true);
-            }
-            NoBold => {
-                face.set_bold(false);
-            }
-            Intense => {
-                face.set_intense(true);
-            }
-            NoIntense => {
-                face.set_intense(false);
-            }
-            Underline => {
-                face.set_underline(true);
-            }
-            NoUnderline => {
-                face.set_underline(false);
-            }
+            Bold => ignore(face.set_bold(true)),
+            NoBold => ignore(face.set_bold(false)),
+            Intense => ignore(face.set_intense(true)),
+            NoIntense => ignore(face.set_intense(false)),
+            Underline => ignore(face.set_underline(true)),
+            NoUnderline => ignore(face.set_underline(false)),
         }
     }
     Ok(())
