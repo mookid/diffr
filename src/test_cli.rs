@@ -15,7 +15,10 @@ impl StringTest {
             ),
             AtLeast(exp) => assert!(
                 actual.contains(exp),
-                format!("{}: expected at least\n\n{}\n\ngot\n\n{}", prefix, exp, actual)
+                format!(
+                    "{}: expected at least\n\n{}\n\ngot\n\n{}",
+                    prefix, exp, actual
+                )
             ),
             Exactly(exp) => assert!(
                 actual.trim() == exp.trim(),
@@ -126,6 +129,21 @@ fn color_invalid_color_not_done() {
 fn color_ok() {
     test_cli(ProcessTest {
         args: &["--colors", "added:foreground:0"],
+        out: Empty,
+        err: Exactly(""),
+        is_success: true,
+    })
+}
+
+#[test]
+fn color_ok_multiple() {
+    test_cli(ProcessTest {
+        args: &[
+            "--colors",
+            "added:foreground:0",
+            "--colors",
+            "removed:background:red",
+        ],
         out: Empty,
         err: Exactly(""),
         is_success: true,
