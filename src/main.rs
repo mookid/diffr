@@ -58,12 +58,24 @@ impl Default for AppConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum FaceName {
     Added,
     RefineAdded,
     Removed,
     RefineRemoved,
+}
+
+impl EnumString for FaceName {
+    fn data() -> &'static [(&'static Self, &'static str)] {
+        use FaceName::*;
+        &[
+            (&Added, "added"),
+            (&RefineAdded, "refine-added"),
+            (&Removed, "removed"),
+            (&RefineRemoved, "refine-removed"),
+        ]
+    }
 }
 
 impl Display for FaceName {
@@ -107,6 +119,45 @@ impl FromStr for ColorOpt {
     }
 }
 
+trait EnumString: Copy {
+    fn data() -> &'static [(&'static Self, &'static str)];
+}
+
+fn join<'a, It>(it: It, sep: &'a str) -> String
+where
+    It: Iterator<Item = &'a str>,
+{
+    let mut res = String::new();
+    let mut first = true;
+    for value in it {
+        if first {
+            first = false;
+        } else {
+            res += sep;
+        }
+        res += value
+    }
+    res
+}
+
+fn tryparse<T>(input: &str) -> Result<T, String>
+where
+    T: EnumString + 'static,
+{
+    T::data()
+        .iter()
+        .find(|p| p.1 == input)
+        .map(|&p| p.0)
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "got '{}', expected {}",
+                input,
+                join(T::data().iter().map(|p| p.1), "|")
+            )
+        })
+}
+
 #[derive(Debug, Clone, Copy)]
 enum AttributeName {
     Foreground,
@@ -117,6 +168,22 @@ enum AttributeName {
     NoIntense,
     Underline,
     NoUnderline,
+}
+
+impl EnumString for AttributeName {
+    fn data() -> &'static [(&'static Self, &'static str)] {
+        use AttributeName::*;
+        &[
+            (&Foreground, "foreground"),
+            (&Background, "background"),
+            (&Bold, "bold"),
+            (&NoBold, "nobold"),
+            (&Intense, "intense"),
+            (&NoIntense, "nointense"),
+            (&Underline, "underline"),
+            (&NoUnderline, "nounderline"),
+        ]
+    }
 }
 
 #[derive(Debug)]
@@ -130,13 +197,16 @@ enum ArgParsingError {
 
 impl Display for ArgParsingError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtErr> {
-        use ArgParsingError::*;
         match self {
-            FaceName(input) => write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
-            AttributeName(input) => write!(f, "unexpected attribute name: got '{}', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline", input),
-            Color(err) => write!(f, "unexpected color value: {}", err),
-            MissingValue(face_name) => write!(f, "error parsing color: missing color value for face '{}'", face_name),
-            Unknown => write!(f, "Internal error"),
+            ArgParsingError::FaceName(err) => write!(f, "unexpected face name: {}", err),
+            ArgParsingError::AttributeName(err) => write!(f, "unexpected attribute name: {}", err),
+            ArgParsingError::Color(err) => write!(f, "unexpected color value: {}", err),
+            ArgParsingError::MissingValue(face_name) => write!(
+                f,
+                "error parsing color: missing color value for face '{}'",
+                face_name
+            ),
+            ArgParsingError::Unknown => write!(f, "Internal error"),
         }
     }
 }
@@ -144,30 +214,14 @@ impl Display for ArgParsingError {
 impl FromStr for FaceName {
     type Err = ArgParsingError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input {
-            "added" => Ok(FaceName::Added),
-            "refine-added" => Ok(FaceName::RefineAdded),
-            "removed" => Ok(FaceName::Removed),
-            "refine-removed" => Ok(FaceName::RefineRemoved),
-            other => Err(ArgParsingError::FaceName(other.to_owned())),
-        }
+        tryparse(input).map_err(ArgParsingError::FaceName)
     }
 }
 
 impl FromStr for AttributeName {
     type Err = ArgParsingError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input {
-            "foreground" => Ok(AttributeName::Foreground),
-            "background" => Ok(AttributeName::Background),
-            "bold" => Ok(AttributeName::Bold),
-            "nobold" => Ok(AttributeName::NoBold),
-            "intense" => Ok(AttributeName::Intense),
-            "nointense" => Ok(AttributeName::NoIntense),
-            "underline" => Ok(AttributeName::Underline),
-            "nounderline" => Ok(AttributeName::NoUnderline),
-            other => Err(ArgParsingError::AttributeName(other.to_owned())),
-        }
+        tryparse(input).map_err(ArgParsingError::AttributeName)
     }
 }
 
