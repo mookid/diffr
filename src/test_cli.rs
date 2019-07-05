@@ -11,15 +11,15 @@ impl StringTest {
         match self {
             Empty => assert!(
                 actual.is_empty(),
-                format!("{}: expected empty, got {}", prefix, actual)
+                format!("{}: expected empty, got\n\n{}", prefix, actual)
             ),
             AtLeast(exp) => assert!(
                 actual.contains(exp),
-                format!("{}: expected at least {}, got {}", prefix, exp, actual)
+                format!("{}: expected at least\n\n{}\n\ngot\n\n{}", prefix, exp, actual)
             ),
             Exactly(exp) => assert!(
-                actual == *exp,
-                format!("{}: expected '{}', got '{}'", prefix, exp, actual)
+                actual.trim() == exp.trim(),
+                format!("{}: expected\n\n{}\n\ngot \n\n{}", prefix, exp, actual)
             ),
         }
     }
@@ -49,7 +49,7 @@ fn test_cli(descr: ProcessTest) {
     assert!(
         descr.is_success == output.status.success(),
         format!(
-            "unexpected status: expected '{}', got '{}'",
+            "unexpected status: expected\n\n{}\n\ngot \n\n{}",
             string_of_status(descr.is_success),
             string_of_status(output.status.success()),
         )
@@ -67,7 +67,7 @@ fn color_invalid_face_name() {
     test_cli(ProcessTest {
         args: &["--colors", "notafacename"],
         out: Empty,
-        err: AtLeast("unexpected face name: got 'notafacename', expected added|refine-added|removed|refine-removed"),
+        err: Exactly("unexpected face name: got 'notafacename', expected added|refine-added|removed|refine-removed"),
         is_success: false,
     })
 }
@@ -77,7 +77,7 @@ fn color_invalid_attribute_name() {
     test_cli(ProcessTest {
         args: &["--colors", "added:bar"],
         out: Empty,
-        err: AtLeast("unexpected attribute name: got 'bar', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline"),
+        err: Exactly("unexpected attribute name: got 'bar', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline"),
         is_success: false,
     })
 }
@@ -87,7 +87,7 @@ fn color_invalid_color_value_name() {
     test_cli(ProcessTest {
         args: &["--colors", "added:foreground:baz"],
         out: Empty,
-        err: AtLeast("unexpected color value: unrecognized color name 'baz'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"),
+        err: Exactly("unexpected color value: unrecognized color name 'baz'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"),
         is_success: false,
     })
 }
@@ -117,7 +117,7 @@ fn color_invalid_color_not_done() {
     test_cli(ProcessTest {
         args: &["--colors", "added:foreground"],
         out: Empty,
-        err: AtLeast("error parsing color: missing color value for face 'added'"),
+        err: Exactly("error parsing color: missing color value for face 'added'"),
         is_success: false,
     })
 }
@@ -127,7 +127,7 @@ fn color_ok() {
     test_cli(ProcessTest {
         args: &["--colors", "added:foreground:0"],
         out: Empty,
-        err: AtLeast(""),
+        err: Exactly(""),
         is_success: true,
     })
 }
