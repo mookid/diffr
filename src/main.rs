@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 use std::collections::hash_map::DefaultHasher;
-use std::convert::{From, TryFrom};
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::fmt::{Error as FmtErr, Formatter};
 use std::hash::Hasher;
@@ -37,72 +37,31 @@ OPTIONS:
 const FLAG_DEBUG: &str = "--debug";
 const FLAG_COLOR: &str = "--colors";
 
-// supported color attributes
-// initial version is isomorphic to ColorSpec
-#[derive(Debug, Default)]
-struct ColorDescription {
-    fg: Option<Color>,
-    bg: Option<Color>,
-    bold: bool,
-    intense: bool,
-    underline: bool,
-}
-
-impl ColorDescription {
-    fn fg(mut self, fg: Option<Color>) -> Self {
-        self.fg = fg;
-        self
-    }
-    fn bg(mut self, bg: Option<Color>) -> Self {
-        self.bg = bg;
-        self
-    }
-    fn bold(mut self, bold: bool) -> Self {
-        self.bold = bold;
-        self
-    }
-    pub fn intense(mut self, intense: bool) -> Self {
-        self.intense = intense;
-        self
-    }
-    pub fn underline(mut self, underline: bool) -> Self {
-        self.underline = underline;
-        self
-    }
-}
-
-impl From<ColorDescription> for ColorSpec {
-    fn from(descr: ColorDescription) -> Self {
-        let mut result = ColorSpec::default();
-        result.set_fg(descr.fg);
-        result.set_bg(descr.bg);
-        result.set_bold(descr.bold);
-        result.set_intense(descr.intense);
-        result.set_underline(descr.underline);
-        result
-    }
-}
-
 #[derive(Debug)]
 struct AppConfig {
     debug: bool,
-    refine_added_face: ColorSpec,
-    refine_removed_face: ColorSpec,
-    removed_face: ColorSpec,
     added_face: ColorSpec,
+    refine_added_face: ColorSpec,
+    removed_face: ColorSpec,
+    refine_removed_face: ColorSpec,
+}
+
+fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
+    let mut colorspec: ColorSpec = ColorSpec::default();
+    colorspec.set_fg(fg);
+    colorspec.set_bg(bg);
+    colorspec.set_bold(bold);
+    colorspec
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
-        fn cd() -> ColorDescription {
-            ColorDescription::default()
-        };
         AppConfig {
             debug: false,
-            refine_added_face: cd().bg(Some(Green)).bold(true).into(),
-            refine_removed_face: cd().bg(Some(Red)).bold(true).into(),
-            removed_face: cd().fg(Some(Red)).into(),
-            added_face: cd().fg(Some(Green)).into(),
+            added_face: color_spec(Some(Green), None, false),
+            refine_added_face: color_spec(None, Some(Green), true),
+            removed_face: color_spec(Some(Red), None, false),
+            refine_removed_face: color_spec(None, Some(Red), true),
         }
     }
 }
