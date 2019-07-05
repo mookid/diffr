@@ -266,58 +266,48 @@ where
 
 fn parse_color_attributes<'a, Values>(
     config: &mut AppConfig,
-    values: Values,
+    mut values: Values,
     face_name: FaceName,
 ) -> Result<(), ArgParsingError>
 where
     Values: Iterator<Item = &'a str>,
 {
-    let mut attribute_name: Option<AttributeName> = None;
     use AttributeName::*;
     let face = face_name.get_face_mut(config);
-    for value in values {
+    while let Some(value) = values.next() {
+        let attribute_name = value.parse::<AttributeName>()?;
         match attribute_name {
-            None => match value.parse::<AttributeName>()? {
-                Foreground => attribute_name = Some(Foreground),
-                Background => attribute_name = Some(Background),
-                Bold => {
-                    face.set_bold(true);
-                }
-                NoBold => {
-                    face.set_bold(false);
-                }
-                Intense => {
-                    face.set_intense(true);
-                }
-                NoIntense => {
-                    face.set_intense(false);
-                }
-                Underline => {
-                    face.set_underline(true);
-                }
-                NoUnderline => {
-                    face.set_underline(false);
-                }
-            },
-
-            Some(name_value) => {
-                let ColorOpt(color) = value.parse::<ColorOpt>()?;
-                match name_value {
-                    Foreground => {
-                        face.set_fg(color);
-                        attribute_name = None;
-                    }
-                    Background => {
-                        face.set_bg(color);
-                        attribute_name = None;
-                    }
-                    _ => return Err(ArgParsingError::Unknown),
+            Foreground | Background => {
+                if let Some(value) = values.next() {
+                    let ColorOpt(color) = value.parse::<ColorOpt>()?;
+                    match attribute_name {
+                        Foreground => face.set_fg(color),
+                        Background => face.set_bg(color),
+                        _ => return Err(ArgParsingError::Unknown),
+                    };
+                } else {
+                    return Err(ArgParsingError::MissingValue(face_name));
                 }
             }
+            Bold => {
+                face.set_bold(true);
+            }
+            NoBold => {
+                face.set_bold(false);
+            }
+            Intense => {
+                face.set_intense(true);
+            }
+            NoIntense => {
+                face.set_intense(false);
+            }
+            Underline => {
+                face.set_underline(true);
+            }
+            NoUnderline => {
+                face.set_underline(false);
+            }
         }
-    }
-    if attribute_name.is_some() {
-        return Err(ArgParsingError::MissingValue(face_name));
     }
     Ok(())
 }
