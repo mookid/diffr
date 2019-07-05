@@ -240,11 +240,9 @@ fn main() {
         )
         .get_matches();
 
-    // dbg!(&matches);
-    // dbg!(matches.values_of(FLAG_COLOR).unwrap().collect::<Vec<_>>());
     let mut config = AppConfig::default();
 
-    if let Some(values) = dbg!(matches.values_of(FLAG_COLOR)) {
+    if let Some(values) = matches.values_of(FLAG_COLOR) {
         if let Err(err) = parse_color_args(&mut config, values) {
             eprintln!("{}", err);
             std::process::exit(-1)
@@ -269,25 +267,18 @@ where
     Values: Iterator<Item = &'a str>,
 {
     for value in values {
-        dbg!(&value);
         let mut pieces = value.split(':');
         if let Some(p) = pieces.next().map(|s| s.parse::<FaceName>()) {
-            dbg!(&p);
             match p {
                 Err(err) => {
-                    // return Err(format!("error parsing {} flag: {}", FLAG_COLOR, err)),
-                    dbg!(&err);
                     return Err(err);
                 }
-                Ok(value) => {
-                    let face_name: FaceName = dbg!(value);
+                Ok(face_name) => {
                     if let Err(err) = parse_color_attributes(config, pieces, face_name) {
                         return Err(err);
                     }
                 }
             }
-            // if let Some(err@Err(_)) = p
-            // return Err("FOO");
         }
     }
     Ok(())
@@ -301,7 +292,6 @@ fn parse_color_attributes<'a, Values>(
 where
     Values: Iterator<Item = &'a str>,
 {
-    // dbg!(values.collect::<Vec<_>>());
     let mut attribute_name: Option<AttributeName> = None;
     use AttributeName::*;
     let face = face_name.get_face_mut(config);
