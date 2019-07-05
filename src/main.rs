@@ -1,7 +1,8 @@
 use clap::{App, Arg};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::{From, TryFrom};
-use std::fmt::{Debug, Error as FmtErr, Formatter};
+use std::fmt::Display;
+use std::fmt::{Error as FmtErr, Formatter};
 use std::hash::Hasher;
 use std::io::{self, BufRead};
 use std::str::FromStr;
@@ -11,7 +12,6 @@ use termcolor::{
     Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
-use std::fmt::Display;
 
 const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
@@ -61,11 +61,11 @@ impl ColorDescription {
         self.bold = bold;
         self
     }
-    fn intense(mut self, intense: bool) -> Self {
+    pub fn intense(mut self, intense: bool) -> Self {
         self.intense = intense;
         self
     }
-    fn underline(mut self, underline: bool) -> Self {
+    pub fn underline(mut self, underline: bool) -> Self {
         self.underline = underline;
         self
     }
@@ -115,6 +115,35 @@ enum FaceName {
     RefineRemoved,
 }
 
+impl FaceName {
+    fn get_face_mut<'a, 'b>(&'a self, config: &'b mut AppConfig) -> &'b mut ColorSpec {
+        use FaceName::*;
+        match self {
+            Added => &mut config.added_face,
+            RefineAdded => &mut config.refine_added_face,
+            Removed => &mut config.removed_face,
+            RefineRemoved => &mut config.refine_removed_face,
+        }
+    }
+}
+
+// custom parsing of Option<Color>
+struct ColorOpt(Option<Color>);
+
+impl FromStr for ColorOpt {
+    type Err = ArgParsingError;
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        if input == "none" {
+            Ok(ColorOpt(None))
+        } else {
+            match input.parse() {
+                Ok(color) => Ok(ColorOpt(Some(color))),
+                Err(err) => Err(ArgParsingError::Color(format!("{}", err)))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum AttributeName {
     Foreground,
@@ -131,13 +160,18 @@ enum AttributeName {
 enum ArgParsingError {
     FaceName(String),
     AttributeName(String),
+    Color(String),
+    Unknown,
 }
 
 impl Display for ArgParsingError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtErr> {
+        use ArgParsingError::*;
         match self {
-            ArgParsingError::FaceName(input) => write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
-            ArgParsingError::AttributeName(input) => write!(f, "unexpected attribute name: got '{}', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline", input),
+            FaceName(input) => write!(f, "unexpected face name: got '{}', expected added|refine-added|removed|refine-removed", input),
+            AttributeName(input) => write!(f, "unexpected attribute name: got '{}', expected foreground|background|bold|nobold|intense|nointense|underline|nounderline", input),
+            Color(err) => write!(f, "unexpected color value: {}", err),
+            Unknown => write!(f, "Internal error"),
         }
     }
 }
@@ -183,12 +217,10 @@ fn main() {
         .arg(
             Arg::with_name(FLAG_COLOR)
                 .long(FLAG_COLOR)
-
                 // TODO: help
                 .value_name("COLORFORHELP")
                 .takes_value(true)
                 .help("Set color")
-
                 // TODO: help
                 .long_help("syntax is...."),
         )
@@ -215,7 +247,10 @@ fn main() {
     }
 }
 
-fn parse_color_args<'a, Values>(config: &mut AppConfig, values: Values) -> Result<(), ArgParsingError>
+fn parse_color_args<'a, Values>(
+    config: &mut AppConfig,
+    values: Values,
+) -> Result<(), ArgParsingError>
 where
     Values: Iterator<Item = &'a str>,
 {
@@ -226,14 +261,14 @@ where
             dbg!(&p);
             match p {
                 Err(err) => {
-                // return Err(format!("error parsing {} flag: {}", FLAG_COLOR, err)),
+                    // return Err(format!("error parsing {} flag: {}", FLAG_COLOR, err)),
                     dbg!(&err);
-                    return Err(err)
+                    return Err(err);
                 }
                 Ok(value) => {
-                    let face_name : FaceName = dbg!(value);
+                    let face_name: FaceName = dbg!(value);
                     if let Err(err) = parse_color_attributes(config, pieces, face_name) {
-                        return Err(err)
+                        return Err(err);
                     }
                 }
             }
@@ -244,28 +279,66 @@ where
     Ok(())
 }
 
-fn parse_color_attributes<'a, Values>(config: &mut AppConfig, values: Values, face_name: FaceName) -> Result<(), ArgParsingError>
+fn parse_color_attributes<'a, Values>(
+    config: &mut AppConfig,
+    values: Values,
+    face_name: FaceName,
+) -> Result<(), ArgParsingError>
 where
     Values: Iterator<Item = &'a str>,
 {
     // dbg!(values.collect::<Vec<_>>());
-    let mut attribute_name : Option<AttributeName> = None;
+    let mut attribute_name: Option<AttributeName> = None;
+    use AttributeName::*;
+    let face = face_name.get_face_mut(config);
     for value in values {
         match attribute_name {
             None => {
                 // expect attribute_name
                 match value.parse::<AttributeName>() {
                     Err(err) => return Err(err),
-                    Ok(name) => attribute_name = Some(name),
+                    Ok(Foreground) => attribute_name = Some(Foreground),
+                    Ok(Background) => attribute_name = Some(Background),
+                    Ok(Bold) => {
+                        face.set_bold(true);
+                    }
+                    Ok(NoBold) => {
+                        face.set_bold(false);
+                    }
+                    Ok(Intense) => {
+                        face.set_intense(true);
+                    }
+                    Ok(NoIntense) => {
+                        face.set_intense(false);
+                    }
+                    Ok(Underline) => {
+                        face.set_underline(true);
+                    }
+                    Ok(NoUnderline) => {
+                        face.set_underline(false);
+                    }
                 }
             }
-            Some(attribute_name) => {
 
+            Some(attribute_name) => {
+                match (value.parse::<ColorOpt>(), attribute_name) {
+                    (Err(err), _) => return Err(err),
+                    (Ok(color), Foreground) => {
+                        face.set_fg(color.0);
+                    }
+                    (Ok(color), Background) => {
+                        face.set_bg(color.0);
+                    }
+                    _ => return Err(ArgParsingError::Unknown)
+                }
             }
         }
         // if let Err(err) = value.parse::<AttributeName>() {
         //     return Err(err)
         // }
+    }
+    if attribute_name.is_some() {
+        return Err(panic!("TODO: add new error case"));
     }
     Ok(())
 }

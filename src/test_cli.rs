@@ -83,11 +83,31 @@ fn color_invalid_attribute_name() {
 }
 
 #[test]
-fn color_invalid_attribute_value() {
+fn color_invalid_color_value_name() {
     test_cli(ProcessTest {
         args: &["--colors", "added:foreground:baz"],
         out: Empty,
-        err: Exactly(""),
+        err: AtLeast("unexpected color value: unrecognized color name 'baz'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"),
+        is_success: false,
+    })
+}
+
+#[test]
+fn color_invalid_color_value_ansi() {
+    test_cli(ProcessTest {
+        args: &["--colors", "added:foreground:777"],
+        out: Empty,
+        err: AtLeast("unexpected color value: unrecognized ansi256 color number"),
+        is_success: false,
+    })
+}
+
+#[test]
+fn color_invalid_color_value_rgb() {
+    test_cli(ProcessTest {
+        args: &["--colors", "added:foreground:0,0,777"],
+        out: Empty,
+        err: AtLeast("unexpected color value: unrecognized RGB color triple"),
         is_success: false,
     })
 }
