@@ -46,14 +46,6 @@ struct AppConfig {
     refine_removed_face: ColorSpec,
 }
 
-fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
-    let mut colorspec: ColorSpec = ColorSpec::default();
-    colorspec.set_fg(fg);
-    colorspec.set_bg(bg);
-    colorspec.set_bold(bold);
-    colorspec
-}
-
 impl Default for AppConfig {
     fn default() -> Self {
         AppConfig {
@@ -387,6 +379,14 @@ struct HunkBuffer {
     removed_tokens: Vec<HashedSliceRef>,
     lines: LineSplit,
     config: AppConfig,
+}
+
+fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
+    let mut colorspec: ColorSpec = ColorSpec::default();
+    colorspec.set_fg(fg);
+    colorspec.set_bg(bg);
+    colorspec.set_bold(bold);
+    colorspec
 }
 
 impl HunkBuffer {
