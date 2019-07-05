@@ -76,6 +76,16 @@ fn color_invalid_face_name() {
 }
 
 #[test]
+fn color_only_face_name() {
+    test_cli(ProcessTest {
+        args: &["--colors", "added"],
+        out: Empty,
+        err: Exactly(""),
+        is_success: true,
+    })
+}
+
+#[test]
 fn color_invalid_attribute_name() {
     test_cli(ProcessTest {
         args: &["--colors", "added:bar"],
