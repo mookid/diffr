@@ -446,7 +446,7 @@ fn get_lcs(seq_a: &[u8], seq_b: &[u8]) -> Vec<Vec<u8>> {
                 res
             }
         };
-        assert_eq!(res.len(), 2_usize.pow(seq_a.len() as u32));
+        assert_eq!(res.len(), 1 << seq_a.len());
         res
     }
     fn is_subseq(subseq: &[u8], seq: &[u8]) -> bool {

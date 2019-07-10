@@ -660,7 +660,7 @@ pub fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
 }
 
 fn diff_rec(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
-    let n = input.n() as isize;
+    let n = to_isize(input.n());
     fn trivial_diff(tok: &Tokenization) -> bool {
         tok.one_past_end_index <= tok.start_index
     }
@@ -700,8 +700,8 @@ struct SplittingPoint {
 
 // Find the splitting point when two sequences differ by one element.
 fn find_splitting_point(input: &Tokens) -> SplittingPoint {
-    let n = input.n() as isize;
-    let m = input.m() as isize;
+    let n = to_isize(input.n());
+    let m = to_isize(input.m());
     let (short, long, nb_tokens, dx, dy) = if n < m {
         (&input.removed, &input.added, n, 0, 1)
     } else if m < n {
