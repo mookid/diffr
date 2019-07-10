@@ -77,13 +77,13 @@ enum FaceName {
 }
 
 impl EnumString for FaceName {
-    fn data() -> &'static [(Self, &'static str)] {
+    fn data() -> &'static [(&'static str, Self)] {
         use FaceName::*;
         &[
-            (Added, "added"),
-            (RefineAdded, "refine-added"),
-            (Removed, "removed"),
-            (RefineRemoved, "refine-removed"),
+            ("added", Added),
+            ("refine-added", RefineAdded),
+            ("removed", Removed),
+            ("refine-removed", RefineRemoved),
         ]
     }
 }
@@ -130,7 +130,7 @@ impl FromStr for ColorOpt {
 }
 
 trait EnumString: Copy {
-    fn data() -> &'static [(Self, &'static str)];
+    fn data() -> &'static [(&'static str, Self)];
 }
 
 fn join<'a, It>(it: It, sep: &'a str) -> String
@@ -156,43 +156,45 @@ where
 {
     T::data()
         .iter()
-        .find(|p| p.1 == input)
-        .map(|&p| p.0)
+        .find(|p| p.0 == input)
+        .map(|&p| p.1)
         .ok_or_else(|| {
             format!(
                 "got '{}', expected {}",
                 input,
-                join(T::data().iter().map(|p| p.1), "|")
+                join(T::data().iter().map(|p| p.0), "|")
             )
         })
 }
 
 #[derive(Debug, Clone, Copy)]
-enum AttributeName {
+enum FaceColor {
     Foreground,
     Background,
-    Bold,
-    NoBold,
-    Intense,
-    NoIntense,
-    Underline,
-    NoUnderline,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AttributeName {
+    Color(FaceColor),
+    Bold(bool),
+    Intense(bool),
+    Underline(bool),
     Reset,
 }
 
 impl EnumString for AttributeName {
-    fn data() -> &'static [(Self, &'static str)] {
+    fn data() -> &'static [(&'static str, Self)] {
         use AttributeName::*;
         &[
-            (Foreground, "foreground"),
-            (Background, "background"),
-            (Bold, "bold"),
-            (NoBold, "nobold"),
-            (Intense, "intense"),
-            (NoIntense, "nointense"),
-            (Underline, "underline"),
-            (NoUnderline, "nounderline"),
-            (Reset, "none"),
+            ("foreground", Color(FaceColor::Foreground)),
+            ("background", Color(FaceColor::Background)),
+            ("bold", Bold(true)),
+            ("nobold", Bold(false)),
+            ("intense", Intense(true)),
+            ("nointense", Intense(false)),
+            ("underline", Underline(true)),
+            ("nounderline", Underline(false)),
+            ("none", Reset),
         ]
     }
 }
@@ -203,7 +205,6 @@ enum ArgParsingError {
     AttributeName(String),
     Color(String),
     MissingValue(FaceName),
-    Unknown,
 }
 
 impl Display for ArgParsingError {
@@ -217,7 +218,6 @@ impl Display for ArgParsingError {
                 "error parsing color: missing color value for face '{}'",
                 face_name
             ),
-            ArgParsingError::Unknown => write!(f, "Internal error"),
         }
     }
 }
@@ -346,24 +346,20 @@ where
     while let Some(value) = values.next() {
         let attribute_name = value.parse::<AttributeName>()?;
         match attribute_name {
-            Foreground | Background => {
+            Color(kind) => {
                 if let Some(value) = values.next() {
                     let ColorOpt(color) = value.parse::<ColorOpt>()?;
-                    match attribute_name {
-                        Foreground => face.set_fg(color),
-                        Background => face.set_bg(color),
-                        _ => return Err(ArgParsingError::Unknown),
+                    match kind {
+                        FaceColor::Foreground => face.set_fg(color),
+                        FaceColor::Background => face.set_bg(color),
                     };
                 } else {
                     return Err(ArgParsingError::MissingValue(face_name));
                 }
             }
-            Bold => ignore(face.set_bold(true)),
-            NoBold => ignore(face.set_bold(false)),
-            Intense => ignore(face.set_intense(true)),
-            NoIntense => ignore(face.set_intense(false)),
-            Underline => ignore(face.set_underline(true)),
-            NoUnderline => ignore(face.set_underline(false)),
+            Bold(bold) => ignore(face.set_bold(bold)),
+            Intense(intense) => ignore(face.set_intense(intense)),
+            Underline(underline) => ignore(face.set_underline(underline)),
             Reset => *face = Default::default(),
         }
     }
