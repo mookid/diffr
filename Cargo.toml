@@ -2,7 +2,16 @@
 name = "diffr"
 version = "0.1.0"
 authors = ["Nathan Moreau <nathan.moreau@m4x.org>"]
+description = """
+An LCS based diff highlighting tool to ease code review from your terminal.
+"""
+categories = ["command-line-utilities"]
 edition = "2018"
+homepage = "https://github.com/mookid/diffr"
+repository = "https://github.com/mookid/diffr"
+keywords = ["diff", "code-review", "git", "console", "cli"]
+license = "MIT"
+readme = "README.md"
 
 [profile.release]
 debug = true
