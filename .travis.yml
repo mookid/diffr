@@ -1,0 +1,13 @@
+language: rust
+env:
+  global:
+    - RUST_BACKTRACE: full
+os:
+  - linux
+  - osx
+  - windows
+rust:
+  - stable
+  - nightly
+matrix:
+  fast_finish: true
