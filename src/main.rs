@@ -133,23 +133,6 @@ trait EnumString: Copy {
     fn data() -> &'static [(&'static str, Self)];
 }
 
-fn join<'a, It>(it: It, sep: &'a str) -> String
-where
-    It: Iterator<Item = &'a str>,
-{
-    let mut res = String::new();
-    let mut first = true;
-    for value in it {
-        if first {
-            first = false;
-        } else {
-            res += sep;
-        }
-        res += value
-    }
-    res
-}
-
 fn tryparse<T>(input: &str) -> Result<T, String>
 where
     T: EnumString + 'static,
@@ -162,7 +145,7 @@ where
             format!(
                 "got '{}', expected {}",
                 input,
-                join(T::data().iter().map(|p| p.0), "|")
+                T::data().iter().map(|p| p.0).collect::<Vec<_>>().join("|")
             )
         })
 }
