@@ -1,0 +1,7 @@
+steps:
+  - script: |
+      rustup component add rustfmt
+      cargo fmt --version
+      cargo fmt --all -- --check
+    displayName: Check formatting
+    condition: eq(variables['Agent.OS'], 'Linux')
