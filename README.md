@@ -16,6 +16,9 @@ The current implementation uses
 [Myers longest common subsequence](http://www.xmailserver.org/diff2.pdf) 
 algorithm.
 
+[![crates.io](https://img.shields.io/crates/v/diffr.svg)](https://crates.io/crates/diffr)
+[![Build Status](https://dev.azure.com/nathanmoreau/diffr/_apis/build/status/mookid.diffr?branchName=master)](https://dev.azure.com/nathanmoreau/diffr/_build/latest?definitionId=4&branchName=master)
+
 ### Screenshots
 
 ![Demo](screenshots/example_simple.png)
