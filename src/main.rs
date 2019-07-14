@@ -59,10 +59,10 @@ impl Default for AppConfig {
         } else {
             AppConfig {
                 debug: false,
-                added_face: color_spec(Some(Rgb(0x33, 0x55, 0x33)), None, false),
-                refine_added_face: color_spec(Some(Rgb(0x22, 0xAA, 0x22)), None, false),
-                removed_face: color_spec(Some(Rgb(0x55, 0x33, 0x33)), None, false),
-                refine_removed_face: color_spec(Some(Rgb(0xAA, 0x22, 0x22)), None, false),
+                added_face: color_spec(None, Some(Rgb(0x33, 0x55, 0x33)), false),
+                refine_added_face: color_spec(None, Some(Rgb(0x33, 0x99, 0x33)), false),
+                removed_face: color_spec(None, Some(Rgb(0x55, 0x33, 0x33)), false),
+                refine_removed_face: color_spec(None, Some(Rgb(0x99, 0x33, 0x33)), false),
             }
         }
     }
