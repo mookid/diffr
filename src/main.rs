@@ -279,6 +279,7 @@ a blue background, written with a bold font.",
         .get_matches();
 
     let mut config = AppConfig::default();
+    config.debug = matches.is_present(FLAG_DEBUG);
 
     if let Some(values) = matches.values_of(FLAG_COLOR) {
         if let Err(err) = parse_color_args(&mut config, values) {
