@@ -18,7 +18,7 @@ algorithm.
 
 ### Screenshots
 
-![Demo](screenshots/example_simple.png)
+![Demo](screenshots/example_simple_mac.png)
 ![Demo](screenshots/example_nonconsecutive.png)
 ![Demo](screenshots/example_cross_lines_common_tokens.png)
 
