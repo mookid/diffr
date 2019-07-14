@@ -1,3 +1,4 @@
+use atty::{is, Stream};
 use clap::{App, Arg};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
@@ -17,22 +18,12 @@ const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
 word-level diff information is displayed using text attributes.";
 
-const USAGE: &str = "
+const USAGE: &str = "\
     diffr reads from standard input and write to standard output.
 
     Typical usage is for interactive use of diff:
     diff -u <file1> <file2> | diffr
     git show | diffr";
-
-const TEMPLATE: &str = "\
-{bin} {version}
-{author}
-{about}
-
-USAGE:{usage}
-
-OPTIONS:
-{unified}";
 
 const FLAG_DEBUG: &str = "--debug";
 const FLAG_COLOR: &str = "--colors";
@@ -225,7 +216,6 @@ fn main() {
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
         .usage(USAGE)
-        .template(TEMPLATE)
         .arg(Arg::with_name(FLAG_DEBUG).long(FLAG_DEBUG).hidden(true))
         .arg(
             Arg::with_name(FLAG_COLOR)
@@ -277,6 +267,11 @@ a blue background, written with a bold font.",
                 ),
         )
         .get_matches();
+
+    if is(Stream::Stdin) {
+        println!("{}", matches.usage());
+        std::process::exit(-1)
+    }
 
     let mut config = AppConfig::default();
     config.debug = matches.is_present(FLAG_DEBUG);
@@ -955,7 +950,7 @@ pub fn diff(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
 }
 
 fn diff_rec(input: &Tokens, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
-    let n = input.n() as isize;
+    let n = to_isize(input.n());
     fn trivial_diff(tok: &Tokenization) -> bool {
         tok.one_past_end_index <= tok.start_index
     }
@@ -995,8 +990,8 @@ struct SplittingPoint {
 
 // Find the splitting point when two sequences differ by one element.
 fn find_splitting_point(input: &Tokens) -> SplittingPoint {
-    let n = input.n() as isize;
-    let m = input.m() as isize;
+    let n = to_isize(input.n());
+    let m = to_isize(input.m());
     let (short, long, nb_tokens, dx, dy) = if n < m {
         (&input.removed, &input.added, n, 0, 1)
     } else if m < n {
