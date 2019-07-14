@@ -66,6 +66,16 @@ fn test_cli(descr: ProcessTest) {
 }
 
 #[test]
+fn debug_flag() {
+    test_cli(ProcessTest {
+        args: &["--debug"],
+        out: Empty,
+        err: AtLeast("hunk processing time (ms):"),
+        is_success: true,
+    })
+}
+
+#[test]
 fn color_invalid_face_name() {
     test_cli(ProcessTest {
         args: &["--colors", "notafacename"],
