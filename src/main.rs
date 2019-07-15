@@ -1,5 +1,5 @@
 use atty::{is, Stream};
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::fmt::Display;
@@ -212,6 +212,7 @@ impl FromStr for AttributeName {
 
 fn main() {
     let matches = App::new("diffr")
+        .setting(AppSettings::UnifiedHelpMessage)
         .version("0.1.0")
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
