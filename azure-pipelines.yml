@@ -3,11 +3,11 @@ trigger:
 
 strategy:
   matrix:
-    Linux:
+    linux:
       vmImage: ubuntu-16.04
-    MacOS:
+    macOS:
       vmImage: macOS-10.13
-    Windows:
+    windows:
       vmImage: vs2017-win2016
 
 pool:
@@ -19,6 +19,7 @@ steps:
       rust_version: stable
 
   - script: |
+      cargo build
       cargo test
     displayName: run tests
 

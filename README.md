@@ -21,7 +21,7 @@ algorithm.
 
 ### Screenshots
 
-![Demo](screenshots/example_simple.png)
+![Demo](screenshots/example_simple_mac.png)
 ![Demo](screenshots/example_nonconsecutive.png)
 ![Demo](screenshots/example_cross_lines_common_tokens.png)
 
@@ -68,6 +68,26 @@ Add the following section to your `.gitconfig` file:
     show = path/to/diffr | less -R
     diff = path/to/diffr | less -R
 ```
+
+#### Display customization
+Use the --colors flag.
+
+You can customize the display of diffing and common segments of added
+and removed lines.
+
+For example,
+
+```
+diffr --colors refine-removed:background:200,0,0:foreground:white:bold
+```
+tweaks the red used for uniquely removed text;
+
+```
+diffr --colors removed:background:magenta --colors added:background:magenta
+```
+
+configures the display so that common segments are less visible than
+the default red and green unique segments.
 
 ### Related projects
 
