@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
 enum StringTest {
     Empty,
     AtLeast(&'static str),
@@ -35,13 +38,24 @@ struct ProcessTest {
     is_success: bool,
 }
 
-// fn test_cli(args: &[&str], is_success: bool, out: &str, err: &str) {
+fn diffr_path() -> PathBuf {
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    dir.push("target");
+    dir.push("debug");
+    dir.push("diffr");
+    dir
+}
+
 fn test_cli(descr: ProcessTest) {
-    let mut cmd = &mut std::process::Command::new("diffr");
+    let mut cmd = Command::new(diffr_path());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::piped());
     for arg in descr.args {
-        cmd = cmd.arg(&*arg);
+        cmd.arg(&*arg);
     }
-    let output = cmd.output().unwrap();
+    let child = cmd.spawn().expect("spawn");
+    let output = child.wait_with_output().expect("wait_with_output");
     fn string_of_status(code: bool) -> &'static str {
         if code {
             "success"
