@@ -4,3 +4,4 @@
   The default still works on windows.
 
 ## 0.1.0 (2019/07/01) Initial release.
+- Initial release.
