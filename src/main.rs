@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use termcolor::{
     Color,
     Color::{Green, Red, Rgb},
-    ColorChoice, ColorSpec, StandardStream, WriteColor,
+    ColorChoice, ColorSpec, ParseColorError, StandardStream, WriteColor,
 };
 
 const ABOUT: &str = "
@@ -114,7 +114,7 @@ impl FromStr for ColorOpt {
         } else {
             match input.parse() {
                 Ok(color) => Ok(ColorOpt(Some(color))),
-                Err(err) => Err(ArgParsingError::Color(format!("{}", err))),
+                Err(err) => Err(ArgParsingError::Color(err)),
             }
         }
     }
@@ -177,7 +177,7 @@ impl EnumString for AttributeName {
 enum ArgParsingError {
     FaceName(String),
     AttributeName(String),
-    Color(String),
+    Color(ParseColorError),
     MissingValue(FaceName),
 }
 
@@ -270,7 +270,7 @@ a blue background, written with a bold font.",
         .get_matches();
 
     if is(Stream::Stdin) {
-        println!("{}", matches.usage());
+        eprintln!("{}", matches.usage());
         std::process::exit(-1)
     }
 
