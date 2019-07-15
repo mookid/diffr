@@ -213,7 +213,7 @@ impl FromStr for AttributeName {
 fn main() {
     let matches = App::new("diffr")
         .setting(AppSettings::UnifiedHelpMessage)
-        .version("0.1.0")
+        .version("0.1.1")
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
         .usage(USAGE)
