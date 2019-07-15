@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use StringTest::*;
 
 enum StringTest {
     Empty,
@@ -7,25 +8,42 @@ enum StringTest {
     Exactly(&'static str),
 }
 
-use StringTest::*;
+fn quote_or_empty(msg: &str) -> String {
+    if msg.is_empty() {
+        "<empty>".to_owned()
+    } else {
+        format!("\"{}\"", msg)
+    }
+}
 
 impl StringTest {
     fn test(&self, actual: &str, prefix: &str) {
         match self {
             Empty => assert!(
                 actual.is_empty(),
-                format!("{}: expected empty, got\n\n{}", prefix, actual)
+                format!(
+                    "{}: expected empty, got\n\n{}",
+                    quote_or_empty(prefix),
+                    quote_or_empty(actual)
+                )
             ),
             AtLeast(exp) => assert!(
                 actual.contains(exp),
                 format!(
                     "{}: expected at least\n\n{}\n\ngot\n\n{}",
-                    prefix, exp, actual
+                    prefix,
+                    quote_or_empty(exp),
+                    quote_or_empty(actual)
                 )
             ),
             Exactly(exp) => assert!(
                 actual.trim() == exp.trim(),
-                format!("{}: expected\n\n{}\n\ngot \n\n{}", prefix, exp, actual)
+                format!(
+                    "{}: expected\n\n{}\n\ngot\n\n{}",
+                    prefix,
+                    quote_or_empty(exp),
+                    quote_or_empty(actual)
+                )
             ),
         }
     }
@@ -66,7 +84,7 @@ fn test_cli(descr: ProcessTest) {
     assert!(
         descr.is_success == output.status.success(),
         format!(
-            "unexpected status: expected\n\n{}\n\ngot \n\n{}",
+            "unexpected status: expected {} got {}",
             string_of_status(descr.is_success),
             string_of_status(output.status.success()),
         )
