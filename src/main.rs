@@ -2,7 +2,7 @@ use atty::{is, Stream};
 use clap::{App, AppSettings, Arg};
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::fmt::{Error as FmtErr, Formatter};
 use std::hash::Hasher;
 use std::io::{self, BufRead};
@@ -605,12 +605,32 @@ fn add_raw_line(dst: &mut LineSplit, line: &[u8]) {
     }
 }
 
-#[derive(Debug)]
 pub struct Tokenization<'a> {
     data: &'a [u8],
     tokens: &'a [HashedSliceRef],
     start_index: isize,
     one_past_end_index: isize,
+}
+
+impl<'a> Debug for Tokenization<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
+        let Self {
+            data,
+            tokens,
+            start_index,
+            one_past_end_index,
+        } = self;
+        write!(
+            f,
+            "{{ data = {:?}, tokens = {:?} }}",
+            String::from_utf8_lossy(data),
+            tokens[to_usize(*start_index)..to_usize(*one_past_end_index)]
+                .iter()
+                .map(|sref| String::from_utf8_lossy(&data[sref.0..sref.1]))
+                .collect::<Vec<_>>()
+        )?;
+        Ok(())
+    }
 }
 
 impl<'a> Tokenization<'a> {
