@@ -548,7 +548,7 @@ impl HunkBuffer {
     }
 
     fn push_aux(&mut self, line: &[u8], added: bool) {
-        let ofs = self.lines.len();
+        let ofs = self.lines.len() + 1;
         add_raw_line(&mut self.lines, line);
         tokenize(
             ofs,
