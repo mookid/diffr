@@ -39,7 +39,7 @@ where
 fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> {
     let mut values = values.clone();
     let mut it = values.iter_mut();
-    let mut result: Vec<(Vec<u8>, DiffKind)> = vec![];
+    let mut result = vec![];
     let mut current = it.next();
     while let Some(next) = it.next() {
         match current {
@@ -69,9 +69,30 @@ fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSliceRef> {
     toks
 }
 
+fn really_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSliceRef> {
+    let mut toks = vec![];
+    tokenize(0, &mut toks, data);
+    toks
+}
+
 fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8]) {
-    let toks_a = dummy_tokenize(&seq_a);
-    let toks_b = dummy_tokenize(&seq_b);
+    diff_sequences_test_aux(expected, seq_a, seq_b, dummy_tokenize)
+}
+
+fn diff_sequences_test_tokenized(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8]) {
+    diff_sequences_test_aux(expected, seq_a, seq_b, really_tokenize)
+}
+
+fn diff_sequences_test_aux<Tok>(
+    expected: &[(&[u8], DiffKind)],
+    seq_a: &[u8],
+    seq_b: &[u8],
+    tok: Tok,
+) where
+    Tok: Fn(&[u8]) -> Vec<HashedSliceRef>,
+{
+    let toks_a = tok(&seq_a);
+    let toks_b = tok(&seq_b);
     let input = Tokens {
         added: Tokenization::new(&seq_b, &toks_b),
         removed: Tokenization::new(&seq_a, &toks_a),
@@ -141,7 +162,7 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     let d = expected
         .iter()
         .map(|(buf, kind)| match kind {
-            Added | Removed => buf.len(),
+            Added | Removed => tok(buf).len(),
             Keep => 0,
         })
         .fold(0, |acc, len| acc + len);
@@ -164,38 +185,56 @@ fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8
     let mut y0 = 0;
     let mut script = vec![];
     for snake in result_complete {
-        let x = to_usize(snake.x0);
-        let y = to_usize(snake.y0);
-        let len = to_usize(snake.len);
+        let Snake {
+            x0: x, y0: y, len, ..
+        } = snake;
+
         if x0 != x {
             assert!(x0 < x);
-            script.push((&input.removed.data[x0..x], Removed));
+            let lo = &input.removed.seq_index(x0);
+            let hi = &input.removed.seq_index(x - 1);
+            script.push((input.removed.data[lo.0..hi.1].to_vec(), Removed));
         }
         if y0 != y {
             assert!(y0 < y);
-            script.push((&input.added.data[y0..y], Added));
+            let lo = &input.added.seq_index(y0);
+            let hi = &input.added.seq_index(y - 1);
+            script.push((input.added.data[lo.0..hi.1].to_vec(), Added));
         }
-        assert_eq!(
-            &input.added.data[y..y + len],
-            &input.removed.data[x..x + len],
-        );
-        script.push((&input.added.data[y..y + len], Keep));
+
+        let mut added = vec![];
+        let mut removed = vec![];
+        for i in 0..len {
+            let r = &input.removed.seq_index(x + i);
+            removed.extend_from_slice(&input.removed.data[r.0..r.1]);
+            let r = &input.added.seq_index(y + i);
+            added.extend_from_slice(&input.added.data[r.0..r.1]);
+        }
+
+        assert_eq!(added, removed, "{:?}", snake);
+        script.push((added.to_vec(), Keep));
+
         x0 = x + len;
         y0 = y + len;
     }
 
     let x = input.removed.nb_tokens();
+    let x0 = to_usize(x0);
     if x0 != x {
         assert!(x0 < x);
-        script.push((&input.removed.data[x0..x], Removed));
+        script.push((input.removed.data[x0..x].to_vec(), Removed));
     }
     let y = input.added.nb_tokens();
+    let y0 = to_usize(y0);
     if y0 != y {
         assert!(y0 < y);
-        script.push((&input.added.data[y0..y], Added));
+        script.push((input.added.data[y0..y].to_vec(), Added));
     }
 
-    assert_eq!(expected, &*script);
+    assert_eq!(
+        &*mk_vec(expected.iter().map(|p| (string_of_bytes(p.0), p.1))),
+        &*mk_vec(script.iter().map(|p| (string_of_bytes(&p.0), p.1))),
+    );
 }
 
 #[test]
@@ -577,4 +616,52 @@ fn check_split(input: &[u8], split: &LineSplit) {
             acc
         })
     );
+}
+
+#[test]
+fn issue15() {
+    diff_sequences_test_tokenized(
+        &[
+            (b"+      ", Added),
+            (b"-", Keep),
+            (b"    -", Removed),
+            (b"01234;\r\n", Keep),
+            (b"+      ", Added),
+            (b"-", Keep),
+            (b"    ", Removed),
+            (b"-", Keep),
+            (b"-", Removed),
+            (b"abc;\r\n", Keep),
+            (b"-    ", Removed),
+            (b"+      ", Added),
+            (b"--", Keep),
+            (b"def;\r\n", Keep),
+            (b"-    ", Removed),
+            (b"+      ", Added),
+            (b"--jkl;\r\n", Keep),
+            (b"+      ", Added),
+            (b"-", Keep),
+            (b"    ", Removed),
+            (b"-", Keep),
+            (b"-", Removed),
+            (b"poi;\r\n", Keep),
+        ],
+        b"-    -01234;\r\n-    --abc;\r\n-    --def;\r\n-    --jkl;\r\n-    --poi;\r\n",
+        b"+      -01234;\r\n+      --abc;\r\n+      --def;\r\n+      --jkl;\r\n+      --poi;\r\n",
+    )
+}
+
+#[test]
+fn issue15_2() {
+    diff_sequences_test_tokenized(
+        &[
+            (b"-", Removed),
+            (b"+", Added),
+            (b"        --include \'+ */\'", Keep),
+            (b" ", Added),
+            (b"\r\n", Keep),
+        ],
+        b"-        --include '+ */'\r\n",
+        b"+        --include '+ */' \r\n",
+    )
 }

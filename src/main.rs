@@ -441,7 +441,7 @@ fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
 }
 
 impl HunkBuffer {
-    // Returns the number of printed shared tokens
+    // Returns the number of completely printed snakes
     fn paint_line<Stream, Positions>(
         data: &[u8],
         &(data_lo, data_hi): &(usize, usize),
@@ -457,7 +457,16 @@ impl HunkBuffer {
         let mut y = data_lo;
         let mut nshared = 0;
         for (lo, hi) in shared {
-            nshared += 1;
+            if hi <= data_lo {
+                nshared += 1;
+                continue;
+            }
+            // XXX: always highlight the leading +/- character
+            let lo = lo.max(data_lo + 1);
+            let hi = hi.min(data_hi);
+            if hi <= lo {
+                continue;
+            }
             output(&data[y..lo], &highlight, out)?;
             output(&data[lo..hi], &no_highlight, out)?;
             y = hi;
@@ -509,18 +518,12 @@ impl HunkBuffer {
                         )
                     };
                     let data = toks.data;
-                    let shared = diff_buffer
-                        .iter()
-                        .skip(*i)
-                        // .filter(|s| s.len != 0)
-                        .map(|s| {
-                            let x0 = if is_plus { s.y0 } else { s.x0 };
-                            let (first, _) = toks.seq_index(x0);
-                            let (_, last) = toks.seq_index(x0 + s.len - 1);
-                            (first.max(line_start), last.min(line_end))
-                        })
-                        // .filter(|(first, last)| first < last)
-                        .take_while(|xy| xy.0 <= line_end);
+                    let shared = diff_buffer.iter().skip(*i).map(|s| {
+                        let x0 = if is_plus { s.y0 } else { s.x0 };
+                        let (first, _) = toks.seq_index(x0);
+                        let (_, last) = toks.seq_index(x0 + s.len - 1);
+                        (first, last)
+                    });
                     *i += Self::paint_line(
                         &data,
                         &(line_start, line_end),
@@ -548,6 +551,7 @@ impl HunkBuffer {
     }
 
     fn push_aux(&mut self, line: &[u8], added: bool) {
+        // XXX: don't tokenize the leading +/- character
         let ofs = self.lines.len() + 1;
         add_raw_line(&mut self.lines, line);
         tokenize(
@@ -1064,6 +1068,9 @@ fn output<Stream>(buf: &[u8], colorspec: &ColorSpec, out: &mut Stream) -> io::Re
 where
     Stream: WriteColor,
 {
+    if buf.is_empty() {
+        return Ok(());
+    }
     let ends_with_newline = buf.last().cloned() == Some(b'\n');
     let buf = if ends_with_newline {
         &buf[..buf.len() - 1]
