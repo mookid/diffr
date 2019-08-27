@@ -42,6 +42,14 @@ makepkg -si
 
 You will need the [Rust compiler installed](https://www.rust-lang.org/tools/install).
 
+To install the latest published version:
+
+```
+cargo install diffr
+```
+
+Alternatively, you can build the latest version:
+
 ```
 git clone https://github.com/mookid/diffr.git
 cd diffr
