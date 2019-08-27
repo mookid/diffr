@@ -20,4 +20,4 @@ debug = true
 termcolor = "1"
 clap = "2.33.0"
 atty = "0.2"
-diffr-lib = { path = "diffr-lib" }
+diffr-lib = "0.1.1"
