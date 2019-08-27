@@ -17,6 +17,7 @@ The current implementation uses
 algorithm.
 
 [![crates.io](https://img.shields.io/crates/v/diffr.svg)](https://crates.io/crates/diffr)
+[![crates.io](https://img.shields.io/crates/d/diffr.svg)](https://crates.io/crates/diffr)
 [![Build Status](https://dev.azure.com/nathanmoreau/diffr/_apis/build/status/mookid.diffr?branchName=master)](https://dev.azure.com/nathanmoreau/diffr/_build/latest?definitionId=4&branchName=master)
 
 ### Screenshots
