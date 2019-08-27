@@ -44,16 +44,15 @@ impl<'a> Debug for Tokenization<'a> {
             start_index,
             one_past_end_index,
         } = self;
-        write!(
-            f,
-            "{{ data = {:?}, tokens = {:?} }}",
-            String::from_utf8_lossy(data),
-            tokens[to_usize(*start_index)..to_usize(*one_past_end_index)]
-                .iter()
-                .map(|sref| String::from_utf8_lossy(&data[sref.lo..sref.hi]))
-                .collect::<Vec<_>>()
-        )?;
-        Ok(())
+        let data_pp = String::from_utf8_lossy(data);
+        let tokens_pp = tokens[to_usize(*start_index)..to_usize(*one_past_end_index)]
+            .iter()
+            .map(|sref| String::from_utf8_lossy(&data[sref.lo..sref.hi]))
+            .collect::<Vec<_>>();
+        f.debug_struct("Tokenization")
+            .field("data", &data_pp)
+            .field("tokens", &tokens_pp)
+            .finish()
     }
 }
 
