@@ -3,5 +3,8 @@ steps:
       rustup component add rustfmt
       cargo fmt --version
       cargo fmt --all -- --check
+      pushd diffr-lib
+      cargo fmt --all -- --check
+      popd
     displayName: Check formatting
     condition: eq(variables['Agent.OS'], 'Linux')
