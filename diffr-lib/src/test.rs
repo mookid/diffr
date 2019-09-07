@@ -56,7 +56,7 @@ fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSpan> {
     for i in 0..data.len() {
         toks.push(HashedSpan {
             lo: i,
-            hi: i+1,
+            hi: i + 1,
             hash: hash_slice(&data[i..i + 1]),
         });
     }
