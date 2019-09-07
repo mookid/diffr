@@ -1,5 +1,6 @@
 steps:
   - script: |
+      set -e
       rustup component add rustfmt
       cargo fmt --version
       cargo fmt --all -- --check
