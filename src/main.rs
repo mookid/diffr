@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 use std::time::SystemTime;
 use termcolor::{
     Color,
-    Color::{Green, Red, Rgb},
+    Color::{Green, Red},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 

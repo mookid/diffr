@@ -225,7 +225,7 @@ where
 pub fn get_matches() -> ArgMatches<'static> {
     App::new("diffr")
         .setting(AppSettings::UnifiedHelpMessage)
-        .version("0.1.1")
+        .version("0.1.2")
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
         .usage(USAGE)
