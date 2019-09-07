@@ -1,6 +1,6 @@
 [package]
 name = "diffr-lib"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Nathan Moreau <nathan.moreau@m4x.org>"]
 description = """
 An implementation of Myers diff algorithm.
