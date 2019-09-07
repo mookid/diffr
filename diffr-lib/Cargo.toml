@@ -11,6 +11,7 @@ homepage = "https://github.com/mookid/diffr"
 repository = "https://github.com/mookid/diffr"
 keywords = ["diff", "LCS"]
 license = "MIT"
+readme = "README.md"
 
 [profile.release]
 debug = true
