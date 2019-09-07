@@ -22,22 +22,12 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        if cfg!(windows) {
-            AppConfig {
-                debug: false,
-                added_face: color_spec(Some(Green), None, false),
-                refine_added_face: color_spec(None, Some(Green), true),
-                removed_face: color_spec(Some(Red), None, false),
-                refine_removed_face: color_spec(None, Some(Red), true),
-            }
-        } else {
-            AppConfig {
-                debug: false,
-                added_face: color_spec(None, Some(Rgb(0x33, 0x55, 0x33)), false),
-                refine_added_face: color_spec(None, Some(Rgb(0x33, 0x99, 0x33)), true),
-                removed_face: color_spec(None, Some(Rgb(0x55, 0x33, 0x33)), false),
-                refine_removed_face: color_spec(None, Some(Rgb(0x99, 0x33, 0x33)), true),
-            }
+        AppConfig {
+            debug: false,
+            added_face: color_spec(Some(Green), None, false),
+            refine_added_face: color_spec(None, Some(Green), true),
+            removed_face: color_spec(Some(Red), None, false),
+            refine_removed_face: color_spec(None, Some(Red), true),
         }
     }
 }

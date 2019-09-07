@@ -91,12 +91,10 @@ diffr --colors refine-removed:background:200,0,0:foreground:white:bold
 ```
 tweaks the red used for uniquely removed text;
 
+The configuration used in the first screenshot is
 ```
-diffr --colors removed:background:magenta --colors added:background:magenta
+diffr --colors refine-added:none:background:0x33,0x99,0x33:bold --colors added:none:background:0x33,0x55,0x33 --colors refine-removed:none:background:0x99,0x33,0x33:bold --colors removed:none:background:0x55,0x33,0x33
 ```
-
-configures the display so that common segments are less visible than
-the default red and green unique segments.
 
 ### Related projects
 
