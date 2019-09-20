@@ -76,6 +76,8 @@ Add the following section to your `.gitconfig` file:
     log  = path/to/diffr | less -R
     show = path/to/diffr | less -R
     diff = path/to/diffr | less -R
+[interactive]
+    diffFilter = path/to/diffr
 ```
 
 #### Display customization
