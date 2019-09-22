@@ -17,7 +17,7 @@ Add this to your `Cargo.toml`:
 diffr-lib="*"
 ```
 
-```
+```rust
 use diffr_lib::{diff, DiffInput, HashedSpan, Tokenization};
 use std::collections::HashSet;
 
