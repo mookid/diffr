@@ -1,5 +1,6 @@
 use atty::{is, Stream};
 use std::io::{self, BufRead};
+use std::iter::Peekable;
 use std::time::SystemTime;
 use termcolor::{
     Color,
@@ -7,6 +8,7 @@ use termcolor::{
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
+use diffr_lib::optimize_partition;
 use diffr_lib::{DiffInput, HashedSpan, LineSplit, Snake, Tokenization};
 
 mod cli_args;
@@ -208,6 +210,16 @@ struct HunkBuffer {
     stats: ExecStats,
 }
 
+fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<HashedSpan> {
+    let mut shared_spans = vec![];
+    for snake in diff_buffer.iter() {
+        for i in 0..snake.len {
+            shared_spans.push(added_tokens.nth_span(snake.y0 + i));
+        }
+    }
+    shared_spans
+}
+
 impl HunkBuffer {
     fn new(config: AppConfig) -> Self {
         let debug = config.debug;
@@ -228,9 +240,9 @@ impl HunkBuffer {
         &(data_lo, data_hi): &(usize, usize),
         no_highlight: &ColorSpec,
         highlight: &ColorSpec,
-        shared: Positions,
+        shared: &mut Peekable<Positions>,
         out: &mut Stream,
-    ) -> io::Result<usize>
+    ) -> io::Result<()>
     where
         Stream: WriteColor,
         Positions: Iterator<Item = (usize, usize)>,
@@ -241,24 +253,31 @@ impl HunkBuffer {
             y += 1
         }
         output(data, data_lo, y, &no_highlight, out)?;
-        let mut nshared = 0;
-        for (lo, hi) in shared {
+        while let Some((lo, hi)) = shared.peek() {
+            if data_hi <= y {
+                break;
+            }
+            let last_iter = data_hi <= *hi;
+            let lo = (*lo).min(data_hi).max(y);
+            let hi = (*hi).min(data_hi);
             if hi <= data_lo {
-                nshared += 1;
+                shared.next();
                 continue;
             }
-            // XXX: always highlight the leading +/- character
-            let lo = lo.max(y);
-            let hi = hi.min(data_hi);
-            if hi <= lo {
+            if hi < lo {
                 continue;
             }
             output(data, y, lo, &highlight, out)?;
             output(data, lo, hi, &no_highlight, out)?;
             y = hi;
+            if last_iter {
+                break;
+            } else {
+                shared.next();
+            }
         }
         output(data, y, data_hi, &highlight, out)?;
-        Ok(nshared)
+        Ok(())
     }
 
     fn process_with_stats<Stream>(&mut self, out: &mut Stream) -> io::Result<()>
@@ -290,35 +309,39 @@ impl HunkBuffer {
             added: Tokenization::new(lines.data(), added_tokens),
         };
         diffr_lib::diff(&tokens, v, diff_buffer);
-        let mut ishared_added = 0;
-        let mut ishared_removed = 0;
+        // TODO output the lcs directly out of `diff` instead
+        let shared_spans = shared_spans(&tokens.added, &diff_buffer);
+        let lcs = &Tokenization::new(tokens.added.data(), &shared_spans);
+        let normalized_lcs_added = optimize_partition(&tokens.added, lcs);
+        let normalized_lcs_removed = optimize_partition(&tokens.removed, lcs);
+        let mut shared_added = normalized_lcs_added
+            .shared_segments(&tokens.added)
+            .peekable();
+        let mut shared_removed = normalized_lcs_removed
+            .shared_segments(&tokens.removed)
+            .peekable();
+
         for (line_start, line_end) in lines.iter() {
             let first = data[line_start];
             match first {
                 b'-' | b'+' => {
                     let is_plus = first == b'+';
-                    let (nohighlight, highlight, toks, i) = if is_plus {
+                    let (nohighlight, highlight, toks, shared) = if is_plus {
                         (
                             &config.added_face,
                             &config.refine_added_face,
                             &tokens.added,
-                            &mut ishared_added,
+                            &mut shared_added,
                         )
                     } else {
                         (
                             &config.removed_face,
                             &config.refine_removed_face,
                             &tokens.removed,
-                            &mut ishared_removed,
+                            &mut shared_removed,
                         )
                     };
-                    let shared = diff_buffer.iter().skip(*i).map(|s| {
-                        let x0 = if is_plus { s.y0 } else { s.x0 };
-                        let first = toks.nth_span(x0).lo;
-                        let last = toks.nth_span(x0 + s.len - 1).hi;
-                        (first, last)
-                    });
-                    *i += Self::paint_line(
+                    Self::paint_line(
                         toks.data(),
                         &(line_start, line_end),
                         &nohighlight,
