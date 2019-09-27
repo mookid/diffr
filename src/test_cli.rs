@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use StringTest::*;
@@ -56,12 +57,19 @@ struct ProcessTest {
     is_success: bool,
 }
 
-fn diffr_path() -> PathBuf {
+fn diffr_path_default() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     dir.push("target");
     dir.push("debug");
     dir.push("diffr");
     dir
+}
+
+fn diffr_path() -> PathBuf {
+    match env::var("DIFFR_TESTS_BINARY_PATH") {
+        Err(_) => diffr_path_default(),
+        Ok(path) => PathBuf::from(path),
+    }
 }
 
 fn test_cli(descr: ProcessTest) {
