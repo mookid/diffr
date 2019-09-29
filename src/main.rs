@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 use std::time::SystemTime;
 use termcolor::{
     Color,
-    Color::{Green, Red},
+    Color::{Green, Red, White},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
@@ -25,9 +25,9 @@ impl Default for AppConfig {
         AppConfig {
             debug: false,
             added_face: color_spec(Some(Green), None, false),
-            refine_added_face: color_spec(None, Some(Green), true),
+            refine_added_face: color_spec(Some(White), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
-            refine_removed_face: color_spec(None, Some(Red), true),
+            refine_removed_face: color_spec(Some(White), Some(Red), true),
         }
     }
 }
