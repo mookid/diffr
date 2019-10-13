@@ -105,7 +105,7 @@ impl<'a> Tokenization<'a> {
         }
     }
 
-    /// Get the span correponding to `self`'s `n`th token.
+    /// Get the span corresponding to `self`'s `n`th token.
     pub fn nth_span(&self, n: isize) -> HashedSpan {
         self.tokens[to_usize(self.start_index + n)]
     }
