@@ -536,6 +536,7 @@ enum TokenKind {
     Other,
     Word,
     Spaces,
+    NewLine,
 }
 
 /// Tokenize data from `src` from the position `ofs` into `tokens`.
@@ -550,10 +551,32 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<HashedSpan>) {
         }
     };
     let mut lo = ofs;
-    let mut kind = TokenKind::Other;
+    let mut kind = TokenKind::NewLine;
+    let mut start_of_line = true;
     for hi in ofs..src.len() {
         let oldkind = kind;
-        kind = classify_byte(src[hi]);
+        let b = src[hi];
+        kind = classify_byte(b);
+        if oldkind == TokenKind::NewLine {
+            start_of_line = true;
+            if b == b' ' || b == b'+' || b == b'-' {
+                // skip the tokenization of the leading token
+                lo = hi;
+                continue;
+            }
+        }
+
+        if kind == TokenKind::Spaces && start_of_line {
+            // skip leading whitespaces
+            lo = hi + 1;
+            continue;
+        }
+
+        if kind != oldkind || kind == TokenKind::Other {
+            push(lo, hi);
+            lo = hi
+        }
+        start_of_line = false;
         if kind != oldkind || oldkind == TokenKind::Other {
             push(lo, hi);
             lo = hi
@@ -563,10 +586,15 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<HashedSpan>) {
 }
 
 fn classify_byte(b: u8) -> TokenKind {
-    match b {
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' => TokenKind::Word,
-        b'\t' | b' ' => TokenKind::Spaces,
-        _ => TokenKind::Other,
+    // NOTE: \n and \r are whitespaces
+    if b == b'\n' || b == b'\r' {
+        TokenKind::NewLine
+    } else if b.is_ascii_whitespace() {
+        TokenKind::Spaces
+    } else if b.is_ascii_alphanumeric() || b == b'_' {
+        TokenKind::Word
+    } else {
+        TokenKind::Other
     }
 }
 
