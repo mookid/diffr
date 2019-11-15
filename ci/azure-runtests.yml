@@ -1,0 +1,7 @@
+steps:
+  - script: |
+      set -e
+      cd ${{parameters.crate_path}}
+      cargo build
+      cargo test
+    displayName: Run tests (${{parameters.crate_path}})
