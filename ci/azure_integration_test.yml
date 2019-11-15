@@ -1,0 +1,19 @@
+steps:
+  - script: |
+      set -e
+      cargo install --git https://github.com/mookid/trimcolor
+    displayName: Install trimcolor
+
+  - script: |
+      set -e
+      EXPECTED="$(git log -p | sha256sum)"
+      ACTUAL="$(git log -p | cargo run | trimcolor | sha256sum)"
+      if test "${ACTUAL}" = "${EXPECTED}"
+      then
+              exit 0
+      else
+              exit 1
+      fi
+      
+    displayName: Integration test
+    condition: eq(variables['Agent.OS'], 'Linux')
