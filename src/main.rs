@@ -174,7 +174,7 @@ impl HunkBuffer {
                 continue;
             }
             // XXX: always highlight the leading +/- character
-            let lo = lo.max(data_lo + 1);
+            let lo = lo.max(y);
             let hi = hi.min(data_hi);
             if hi <= lo {
                 continue;
