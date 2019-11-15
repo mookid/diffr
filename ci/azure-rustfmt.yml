@@ -1,11 +1,9 @@
 steps:
   - script: |
       set -e
+      cd ${{parameters.crate_path}}
       rustup component add rustfmt
       cargo fmt --version
       cargo fmt --all -- --check
-      pushd diffr-lib
-      cargo fmt --all -- --check
-      popd
-    displayName: Check formatting
+    displayName: Check formatting (${{parameters.crate_path}})
     condition: eq(variables['Agent.OS'], 'Linux')
