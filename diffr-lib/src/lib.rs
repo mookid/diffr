@@ -555,15 +555,10 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<HashedSpan>) {
     let mut start_of_line = true;
     for hi in ofs..src.len() {
         let oldkind = kind;
-        let b = src[hi];
-        kind = classify_byte(b);
+        kind = classify_byte(src[hi]);
         if oldkind == TokenKind::NewLine {
             start_of_line = true;
-            if b == b' ' || b == b'+' || b == b'-' {
-                // skip the tokenization of the leading token
-                lo = hi;
-                continue;
-            }
+            continue;
         }
 
         if kind == TokenKind::Spaces && start_of_line {

@@ -544,7 +544,7 @@ fn check_split(input: &[u8], split: &LineSplit) {
 
 #[test]
 fn tokenize_discards_leading_whitespaces() {
-    let buf = b"-    -01234;\r\n-    --abc;\r\n-    --def;\r\n-    --jkl;\r\n-    --poi;\r\n";
+    let buf = b"-    -01234;\r\n\r\n-    --abc;\r\n-    --def;\r\n-    --jkl;\r\n-    --poi;\r\n";
     let mut tokens = vec![];
     tokenize(buf, 0, &mut tokens);
     let tokens_str: Vec<_> = tokens
