@@ -6,9 +6,9 @@ steps:
 
   - script: |
       set -e
-      EXPECTED="$(git log -p | sha256sum)"
-      ACTUAL="$(git log -p | cargo run | trimcolor | sha256sum)"
-      if test "${ACTUAL}" = "${EXPECTED}"
+      git log -p >whole_log
+      cargo run <whole_log | trimcolor >whole_log_diffr
+      if git diff --no-index whole_log whole_log_diffr
       then
               exit 0
       else
