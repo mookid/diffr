@@ -113,7 +113,7 @@ fn try_main(config: AppConfig) -> io::Result<()> {
                     hunk_buffer.process(&mut stdout)?;
                 }
                 in_hunk = other == Some(b'@');
-                output(&buffer, &ColorSpec::default(), &mut stdout)?;
+                output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
                 time_computing_diff_ms += duration_ms(&start);
             }
         }
@@ -161,7 +161,12 @@ impl HunkBuffer {
         Stream: WriteColor,
         Positions: Iterator<Item = (usize, usize)>,
     {
-        let mut y = data_lo;
+        let mut y = data_lo + 1;
+        // XXX: skip leading token and leading spaces
+        while y < data_hi && data[y].is_ascii_whitespace() {
+            y += 1
+        }
+        output(data, data_lo, y, &no_highlight, out)?;
         let mut nshared = 0;
         for (lo, hi) in shared {
             if hi <= data_lo {
@@ -169,18 +174,16 @@ impl HunkBuffer {
                 continue;
             }
             // XXX: always highlight the leading +/- character
-            let lo = lo.max(data_lo + 1);
+            let lo = lo.max(y);
             let hi = hi.min(data_hi);
             if hi <= lo {
                 continue;
             }
-            output(&data[y..lo], &highlight, out)?;
-            output(&data[lo..hi], &no_highlight, out)?;
+            output(data, y, lo, &highlight, out)?;
+            output(data, lo, hi, &no_highlight, out)?;
             y = hi;
         }
-        if y < data_hi {
-            output(&data[y..data_hi], &highlight, out)?;
-        }
+        output(data, y, data_hi, &highlight, out)?;
         Ok(nshared)
     }
 
@@ -239,7 +242,7 @@ impl HunkBuffer {
                         out,
                     )?;
                 }
-                _ => output(&data[line_start..line_end], &ColorSpec::default(), out)?,
+                _ => output(data, line_start, line_end, &ColorSpec::default(), out)?,
             }
         }
         lines.clear();
@@ -257,8 +260,7 @@ impl HunkBuffer {
     }
 
     fn push_aux(&mut self, line: &[u8], added: bool) {
-        // XXX: don't tokenize the leading +/- character
-        let ofs = self.lines.len() + 1;
+        let ofs = self.lines.len();
         add_raw_line(&mut self.lines, line);
         diffr_lib::tokenize(
             &self.lines.data(),
@@ -283,13 +285,21 @@ fn add_raw_line(dst: &mut LineSplit, line: &[u8]) {
     }
 }
 
-fn output<Stream>(buf: &[u8], colorspec: &ColorSpec, out: &mut Stream) -> io::Result<()>
+fn output<Stream>(
+    buf: &[u8],
+    from: usize,
+    to: usize,
+    colorspec: &ColorSpec,
+    out: &mut Stream,
+) -> io::Result<()>
 where
     Stream: WriteColor,
 {
-    if buf.is_empty() {
+    let to = to.min(buf.len());
+    if from >= to {
         return Ok(());
     }
+    let buf = &buf[from..to];
     let ends_with_newline = buf.last().cloned() == Some(b'\n');
     let buf = if ends_with_newline {
         &buf[..buf.len() - 1]

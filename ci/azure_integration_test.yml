@@ -1,0 +1,19 @@
+steps:
+  - script: |
+      set -e
+      cargo install --git https://github.com/mookid/trimcolor
+    displayName: Install trimcolor
+
+  - script: |
+      set -e
+      git log -p >whole_log
+      cargo run <whole_log | trimcolor >whole_log_diffr
+      if git diff --no-index whole_log whole_log_diffr
+      then
+              exit 0
+      else
+              exit 1
+      fi
+      
+    displayName: Integration test
+    condition: eq(variables['Agent.OS'], 'Linux')
