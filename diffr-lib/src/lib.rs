@@ -567,15 +567,11 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<HashedSpan>) {
             continue;
         }
 
-        if kind != oldkind || kind == TokenKind::Other {
-            push(lo, hi);
-            lo = hi
-        }
-        start_of_line = false;
         if kind != oldkind || oldkind == TokenKind::Other {
             push(lo, hi);
             lo = hi
         }
+        start_of_line = false;
     }
     push(lo, src.len());
 }
