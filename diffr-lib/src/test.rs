@@ -63,8 +63,18 @@ fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSpan> {
     toks
 }
 
+fn really_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSpan> {
+    let mut toks = vec![];
+    tokenize(data, 0, &mut toks);
+    toks
+}
+
 fn diff_sequences_test(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8]) {
     diff_sequences_test_aux(expected, seq_a, seq_b, dummy_tokenize)
+}
+
+fn diff_sequences_test_tokenized(expected: &[(&[u8], DiffKind)], seq_a: &[u8], seq_b: &[u8]) {
+    diff_sequences_test_aux(expected, seq_a, seq_b, really_tokenize)
 }
 
 fn diff_sequences_test_aux<Tok>(
@@ -543,20 +553,49 @@ fn check_split(input: &[u8], split: &LineSplit) {
 }
 
 #[test]
-fn tokenize_discards_leading_whitespaces() {
-    let buf = b"-    -01234;\r\n\r\n-    --abc;\r\n-    --def;\r\n-    --jkl;\r\n-    --poi;\r\n";
-    let mut tokens = vec![];
-    tokenize(buf, 0, &mut tokens);
-    let tokens_str: Vec<_> = tokens
-        .iter()
-        .map(|span| String::from_utf8_lossy(&buf[span.lo..span.hi]))
-        .collect();
-
-    assert_eq!(
-        &vec![
-            "-", "01234", ";", "-", "-", "abc", ";", "-", "-", "def", ";", "-", "-", "jkl", ";",
-            "-", "-", "poi", ";", "\r\n"
+fn issue15() {
+    diff_sequences_test_tokenized(
+        &[
+            (b"+      ", Added),
+            (b"-", Keep),
+            (b"    -", Removed),
+            (b"01234;\r\n", Keep),
+            (b"+      ", Added),
+            (b"-", Keep),
+            (b"    ", Removed),
+            (b"-", Keep),
+            (b"-", Removed),
+            (b"abc;\r\n", Keep),
+            (b"-    ", Removed),
+            (b"+      ", Added),
+            (b"--", Keep),
+            (b"def;\r\n", Keep),
+            (b"-    ", Removed),
+            (b"+      ", Added),
+            (b"--jkl;\r\n", Keep),
+            (b"+      ", Added),
+            (b"-", Keep),
+            (b"    ", Removed),
+            (b"-", Keep),
+            (b"-", Removed),
+            (b"poi;\r\n", Keep),
         ],
-        &tokens_str,
+        b"-    -01234;\r\n-    --abc;\r\n-    --def;\r\n-    --jkl;\r\n-    --poi;\r\n",
+        b"+      -01234;\r\n+      --abc;\r\n+      --def;\r\n+      --jkl;\r\n+      --poi;\r\n",
+    )
+}
+
+#[test]
+fn issue15_2() {
+    diff_sequences_test_tokenized(
+        &[
+            (b"-", Removed),
+            (b"+", Added),
+            (b"        --include \'+ */\'", Keep),
+            (b" ", Added),
+            (b"\r\n", Keep),
+        ],
+        b"-        --include '+ */'\r\n",
+        b"+        --include '+ */' \r\n",
     )
 }

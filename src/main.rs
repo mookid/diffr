@@ -260,8 +260,12 @@ impl HunkBuffer {
     }
 
     fn push_aux(&mut self, line: &[u8], added: bool) {
-        let ofs = self.lines.len();
+        let mut ofs = self.lines.len() + 1;
         add_raw_line(&mut self.lines, line);
+        // XXX: skip leading token and leading spaces
+        while ofs < line.len() && line[ofs].is_ascii_whitespace() {
+            ofs += 1
+        }
         diffr_lib::tokenize(
             &self.lines.data(),
             ofs,
@@ -274,6 +278,7 @@ impl HunkBuffer {
     }
 }
 
+// TODO count whitespace characters as well here
 fn add_raw_line(dst: &mut LineSplit, line: &[u8]) {
     let mut i = 0;
     let len = line.len();
