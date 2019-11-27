@@ -59,15 +59,15 @@ fn main() {
     }
 }
 
-fn now(debug: bool) -> Option<SystemTime> {
-    if debug {
+fn now(do_timings: bool) -> Option<SystemTime> {
+    if do_timings {
         Some(SystemTime::now())
     } else {
         None
     }
 }
 
-fn duration_ms(time: &Option<SystemTime>) -> u128 {
+fn duration_ms_since(time: &Option<SystemTime>) -> u128 {
     if let Some(time) = time {
         if let Ok(elapsed) = time.elapsed() {
             elapsed.as_millis()
@@ -86,15 +86,10 @@ fn try_main(config: AppConfig) -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
-    let mut hunk_buffer = HunkBuffer::default();
+    let mut hunk_buffer = HunkBuffer::new(config);
     let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
     let mut in_hunk = false;
-
-    let mut time_computing_diff_ms = 0;
-    let debug = config.debug;
-    hunk_buffer.config = config;
-    let start = now(debug);
 
     // process hunks
     loop {
@@ -108,24 +103,20 @@ fn try_main(config: AppConfig) -> io::Result<()> {
             (true, Some(b'-')) => hunk_buffer.push_removed(&buffer),
             (true, Some(b' ')) => add_raw_line(&mut hunk_buffer.lines, &buffer),
             (_, other) => {
-                let start = now(debug);
                 if in_hunk {
-                    hunk_buffer.process(&mut stdout)?;
+                    hunk_buffer.process_with_stats(&mut stdout)?;
                 }
                 in_hunk = other == Some(b'@');
                 output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
-                time_computing_diff_ms += duration_ms(&start);
             }
         }
         buffer.clear();
     }
 
     // flush remaining hunk
-    hunk_buffer.process(&mut stdout)?;
-    if debug {
-        eprintln!("hunk processing time (ms): {}", time_computing_diff_ms);
-        eprintln!("total processing time (ms): {}", duration_ms(&start));
-    }
+    hunk_buffer.process_with_stats(&mut stdout)?;
+    hunk_buffer.stats.stop();
+    hunk_buffer.stats.report()?;
     Ok(())
 }
 
@@ -138,6 +129,75 @@ fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
 }
 
 #[derive(Default)]
+struct ExecStats {
+    time_computing_diff_ms: u128,
+    total_time_ms: u128,
+    program_start: Option<SystemTime>,
+}
+
+impl ExecStats {
+    fn new(debug: bool) -> Self {
+        ExecStats {
+            time_computing_diff_ms: 0,
+            total_time_ms: 0,
+            program_start: now(debug),
+        }
+    }
+
+    /// Should we call SystemTime::now at all?
+    fn do_timings(&self) -> bool {
+        self.program_start.is_some()
+    }
+
+    fn stop(&mut self) {
+        if self.do_timings() {
+            self.total_time_ms = duration_ms_since(&self.program_start);
+        }
+    }
+
+    fn report(&self) -> std::io::Result<()> {
+        self.report_into(&mut std::io::stderr())
+    }
+
+    fn report_into<W>(&self, w: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
+        const WORD_PADDING: usize = 35;
+        const FIELD_PADDING: usize = 15;
+        if self.do_timings() {
+            let format_header = |name| format!("{} (ms)", name);
+            let format_ratio = |dt: u128| {
+                format!(
+                    "({:3.3}%)",
+                    100.0 * (dt as f64) / (self.total_time_ms as f64)
+                )
+            };
+            let mut report = |name: &'static str, dt: u128| {
+                writeln!(
+                    w,
+                    "{:>w$} {:>f$} {:>f$}",
+                    format_header(name),
+                    dt,
+                    format_ratio(dt),
+                    w = WORD_PADDING,
+                    f = FIELD_PADDING,
+                )
+            };
+            report("hunk processing time", self.time_computing_diff_ms)?;
+            writeln!(
+                w,
+                "{:>w$} {:>f$}",
+                format_header("total processing time"),
+                self.total_time_ms,
+                w = WORD_PADDING,
+                f = FIELD_PADDING,
+            )?;
+        }
+        Ok(())
+    }
+}
+
 struct HunkBuffer {
     v: Vec<isize>,
     diff_buffer: Vec<Snake>,
@@ -145,9 +205,23 @@ struct HunkBuffer {
     removed_tokens: Vec<HashedSpan>,
     lines: LineSplit,
     config: AppConfig,
+    stats: ExecStats,
 }
 
 impl HunkBuffer {
+    fn new(config: AppConfig) -> Self {
+        let debug = config.debug;
+        HunkBuffer {
+            v: vec![],
+            diff_buffer: vec![],
+            added_tokens: vec![],
+            removed_tokens: vec![],
+            lines: Default::default(),
+            config,
+            stats: ExecStats::new(debug),
+        }
+    }
+
     // Returns the number of completely printed snakes
     fn paint_line<Stream, Positions>(
         data: &[u8],
@@ -187,6 +261,16 @@ impl HunkBuffer {
         Ok(nshared)
     }
 
+    fn process_with_stats<Stream>(&mut self, out: &mut Stream) -> io::Result<()>
+    where
+        Stream: WriteColor,
+    {
+        let start = now(self.stats.do_timings());
+        let result = self.process(out);
+        self.stats.time_computing_diff_ms += duration_ms_since(&start);
+        result
+    }
+
     fn process<Stream>(&mut self, out: &mut Stream) -> io::Result<()>
     where
         Stream: WriteColor,
@@ -198,6 +282,7 @@ impl HunkBuffer {
             removed_tokens,
             lines,
             config,
+            stats: _,
         } = self;
         let data = lines.data();
         let tokens = DiffInput {
