@@ -110,7 +110,7 @@ fn debug_flag() {
     test_cli(ProcessTest {
         args: &["--debug"],
         out: Empty,
-        err: AtLeast("hunk processing time (ms):"),
+        err: AtLeast("hunk processing time (ms)"),
         is_success: true,
     })
 }
