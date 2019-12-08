@@ -1,3 +1,8 @@
+## 0.1.3 (2019/12/07)
+- diffr-lib: optimize_partition: new function.
+  Postprocessing of the results of the LCS algorithm to reduce the
+  number of segments of consecutive shared tokens.
+
 ## 0.1.2 (2019/09/07)
 - Split in two crates: diffr-lib contains reusable parts, while diffr
   only contains application logic.
