@@ -599,3 +599,145 @@ fn issue15_2() {
         b"+        --include '+ */' \r\n",
     )
 }
+
+#[test]
+fn issue27() {
+    diff_sequences_test(
+        &[
+            (b"note: ", Keep),
+            (b"AAA", Removed),
+            (b"BBB CCC", Added),
+            (b"\r\n", Keep),
+        ],
+        b"note: AAA\r\n",
+        b"note: BBB CCC\r\n",
+    );
+    diff_sequences_test(
+        &[(b"^", Added), (b"^^^^^^^^^^", Keep), (b"^^^^", Added)],
+        b"^^^^^^^^^^",
+        b"^^^^^^^^^^^^^^^",
+    );
+    diff_sequences_test(
+        &[
+            (b"a", Keep),
+            (b"cbc", Added),
+            (b"bcz", Keep),
+            (b"c", Added),
+            (b"z", Keep),
+            (b"abz", Added),
+        ],
+        b"abczz",
+        b"acbcbczczabz",
+    );
+}
+
+#[derive(Debug)]
+struct TestNormalizePartitionExpected<'a> {
+    expected: &'a [&'a [u8]],
+    expected_starts_with_shared: bool,
+}
+
+fn test_optimize_alternatives(
+    alternatives: &[TestNormalizePartitionExpected],
+    seq: &[u8],
+    lcs: &[u8],
+) {
+    let toks_seq = dummy_tokenize(&seq);
+    let toks_lcs = dummy_tokenize(&lcs);
+    let seq = &Tokenization::new(&seq, &toks_seq);
+    let lcs = &Tokenization::new(&lcs, &toks_lcs);
+    let opt_result = optimize_partition(seq, lcs);
+    let mut it = opt_result.path.iter().cloned();
+    let mut prev = match it.next() {
+        None => {
+            assert!(alternatives.iter().any(|e| e.expected.is_empty()));
+            return;
+        }
+        Some(val) => val,
+    };
+    let mut partition = vec![];
+    for i in it {
+        let mut part = vec![];
+        for j in prev..i {
+            part.extend_from_slice(seq.nth_token(j as isize).data);
+        }
+        partition.push(part);
+        prev = i;
+    }
+    assert!(
+        alternatives.iter().any(|e| {
+            let expected = e
+                .expected
+                .iter()
+                .map(|slice| slice.to_vec())
+                .collect::<Vec<_>>();
+            expected == &*partition
+                && e.expected_starts_with_shared == opt_result.starts_with_shared
+        }),
+        "alternatives:\n\t{:?}\n\nactual:\n\t{:?}",
+        &alternatives,
+        (&partition, opt_result.starts_with_shared),
+    )
+}
+
+fn test_optimize_partition1(
+    expected: &[&[u8]],
+    expected_starts_with_shared: bool,
+    seq: &[u8],
+    lcs: &[u8],
+) {
+    let expected = vec![TestNormalizePartitionExpected {
+        expected,
+        expected_starts_with_shared,
+    }];
+    test_optimize_alternatives(&expected, seq, lcs)
+}
+
+#[test]
+fn test_optimize_partition() {
+    test_optimize_partition1(&[b"abcd"], true, b"abcd", b"abcd");
+    test_optimize_partition1(&[b"abcd"], false, b"abcd", b"");
+    test_optimize_partition1(&[b"a", b"xyz", b"bc"], true, b"axyzbc", b"abc");
+    test_optimize_partition1(&[b"zab", b"a"], false, b"zaba", b"a");
+    test_optimize_partition1(&[b"k", b"a", b"xyz", b"bc"], false, b"kaxyzbc", b"abc");
+    test_optimize_partition1(
+        &[b"k", b"a", b"xyz", b"bc", b"x"],
+        false,
+        b"kaxyzbcx",
+        b"abc",
+    );
+    test_optimize_partition1(
+        &[b"a", b"cbc", b"bcz", b"czab", b"z"],
+        true,
+        b"acbcbczczabz",
+        b"abczz",
+    );
+    test_optimize_alternatives(
+        &[
+            TestNormalizePartitionExpected {
+                expected: &[b"^^^^^^^^^^", b"^^^^^"],
+                expected_starts_with_shared: true,
+            },
+            TestNormalizePartitionExpected {
+                expected: &[b"^^^^^", b"^^^^^^^^^^"],
+                expected_starts_with_shared: false,
+            },
+        ],
+        b"^^^^^^^^^^^^^^^",
+        b"^^^^^^^^^^",
+    );
+
+    test_optimize_partition1(
+        &[b"note: ", b"AAA", b"\r\n"],
+        true,
+        b"note: AAA\r\n",
+        b"note: \r\n",
+    );
+
+    test_optimize_partition1(
+        &[b"note: ", b"BBB CCC", b"\r\n"],
+        true,
+        b"note: BBB CCC\r\n",
+        b"note: \r\n",
+    );
+}

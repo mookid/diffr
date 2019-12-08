@@ -11,7 +11,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::fmt::{Error as FmtErr, Formatter};
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 
 /// A span of bytes and a hash of the content it refers.
 #[derive(Clone, Copy, Debug)]
@@ -22,10 +22,23 @@ pub struct HashedSpan {
 }
 
 /// A wrapper around a token, optimized for equality comparison.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct HashedSlice<'a> {
     pub hash: u64,
     pub data: &'a [u8],
+}
+
+impl<'a> Debug for HashedSlice<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
+        let data_pp = String::from_utf8_lossy(self.data);
+        f.debug_tuple("HashedSlice").field(&data_pp).finish()
+    }
+}
+
+impl<'a> Hash for HashedSlice<'a> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(self.hash)
+    }
 }
 
 /// A tokenized slice of bytes.
@@ -569,6 +582,10 @@ fn classify_byte(b: u8) -> TokenKind {
         _ => TokenKind::Other,
     }
 }
+
+mod best_projection;
+pub use crate::best_projection::optimize_partition;
+pub use crate::best_projection::{NormalizationResult, SharedSegments};
 
 #[cfg(test)]
 mod test;
