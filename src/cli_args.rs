@@ -260,7 +260,7 @@ This flag may be provided multiple times.
 The syntax is the following:
 
 color_spec = face-name + ':' + attributes
-attributes = <empty>
+attributes = attribute
            | attribute + ':' + attributes
 attribute  = ('foreground' | 'background') + ':' + color
            | (<empty> | 'no') + ('bold' | 'intense' | 'underline')
