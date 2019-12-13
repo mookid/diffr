@@ -133,6 +133,8 @@ fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
 #[derive(Default)]
 struct ExecStats {
     time_computing_diff_ms: u128,
+    time_lcs_ms: u128,
+    time_opt_lcs_ms: u128,
     total_time_ms: u128,
     program_start: Option<SystemTime>,
 }
@@ -141,6 +143,8 @@ impl ExecStats {
     fn new(debug: bool) -> Self {
         ExecStats {
             time_computing_diff_ms: 0,
+            time_lcs_ms: 0,
+            time_opt_lcs_ms: 0,
             total_time_ms: 0,
             program_start: now(debug),
         }
@@ -187,6 +191,8 @@ impl ExecStats {
                 )
             };
             report("hunk processing time", self.time_computing_diff_ms)?;
+            report("-- compute lcs", self.time_lcs_ms)?;
+            report("-- optimize lcs", self.time_opt_lcs_ms)?;
             writeln!(
                 w,
                 "{:>w$} {:>f$}",
@@ -301,19 +307,23 @@ impl HunkBuffer {
             removed_tokens,
             lines,
             config,
-            stats: _,
+            stats,
         } = self;
         let data = lines.data();
         let tokens = DiffInput {
             removed: Tokenization::new(lines.data(), removed_tokens),
             added: Tokenization::new(lines.data(), added_tokens),
         };
+        let start = now(stats.do_timings());
         diffr_lib::diff(&tokens, v, diff_buffer);
         // TODO output the lcs directly out of `diff` instead
         let shared_spans = shared_spans(&tokens.added, &diff_buffer);
         let lcs = &Tokenization::new(tokens.added.data(), &shared_spans);
+        stats.time_lcs_ms += duration_ms_since(&start);
+        let start = now(stats.do_timings());
         let normalized_lcs_added = optimize_partition(&tokens.added, lcs);
         let normalized_lcs_removed = optimize_partition(&tokens.removed, lcs);
+        stats.time_opt_lcs_ms += duration_ms_since(&start);
         let mut shared_added = normalized_lcs_added
             .shared_segments(&tokens.added)
             .peekable();
