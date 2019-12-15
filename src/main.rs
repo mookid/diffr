@@ -1,4 +1,8 @@
 use atty::{is, Stream};
+
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::{Error as FmtErr, Formatter};
 use std::io::{self, BufRead};
 use std::iter::Peekable;
 use std::time::SystemTime;
@@ -109,6 +113,9 @@ fn try_main(config: AppConfig) -> io::Result<()> {
                     hunk_buffer.process_with_stats(&mut stdout)?;
                 }
                 in_hunk = other == Some(b'@');
+                if in_hunk {
+                    hunk_buffer.line_number_info = dbg!(parse_line_number(&buffer));
+                }
                 output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
             }
         }
@@ -211,6 +218,7 @@ struct HunkBuffer {
     diff_buffer: Vec<Snake>,
     added_tokens: Vec<HashedSpan>,
     removed_tokens: Vec<HashedSpan>,
+    line_number_info: Option<HunkHeader>,
     lines: LineSplit,
     config: AppConfig,
     stats: ExecStats,
@@ -234,6 +242,7 @@ impl HunkBuffer {
             diff_buffer: vec![],
             added_tokens: vec![],
             removed_tokens: vec![],
+            line_number_info: None,
             lines: Default::default(),
             config,
             stats: ExecStats::new(debug),
@@ -305,6 +314,7 @@ impl HunkBuffer {
             diff_buffer,
             added_tokens,
             removed_tokens,
+            line_number_info: _,
             lines,
             config,
             stats,
@@ -495,6 +505,185 @@ fn skip_token(buf: &[u8]) -> usize {
             len
         }
     }
+}
+
+#[derive(Default, PartialEq, Eq)]
+struct HunkHeader {
+    // range are (ofs,len) for the interval [ofs, ofs + len)
+    minus_range: (usize, usize),
+    plus_range: (usize, usize),
+}
+
+const WIDTH: [usize; 20] = [
+    0,
+    9,
+    99,
+    999,
+    9999,
+    99999,
+    999999,
+    9999999,
+    99999999,
+    999999999,
+    9999999999,
+    99999999999,
+    999999999999,
+    9999999999999,
+    99999999999999,
+    999999999999999,
+    9999999999999999,
+    99999999999999999,
+    999999999999999999,
+    9999999999999999999,
+];
+
+fn width1(x: usize) -> usize {
+    let result = WIDTH.binary_search(&x);
+    match result {
+        Ok(i) | Err(i) => i,
+    }
+}
+
+impl HunkHeader {
+    fn new(mr_lo: usize, mr_len: usize, pr_lo: usize, pr_len: usize) -> Self {
+        HunkHeader {
+            minus_range: (mr_lo, mr_len),
+            plus_range: (pr_lo, pr_len),
+        }
+    }
+
+    fn width(&self) -> usize {
+        width1(self.minus_range.0 + self.minus_range.1)
+            + 1
+            + width1(self.plus_range.0 + self.plus_range.1)
+    }
+}
+
+impl Debug for HunkHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
+        f.write_fmt(format_args!(
+            "-{},{} +{},{}",
+            self.minus_range.0, self.minus_range.1, self.plus_range.0, self.plus_range.1,
+        ))
+    }
+}
+
+impl Display for HunkHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
+        Debug::fmt(&self, f)
+    }
+}
+
+struct LineNumberParser<'a> {
+    buf: &'a [u8],
+    i: usize,
+}
+
+impl<'a> LineNumberParser<'a> {
+    fn new(buf: &'a [u8]) -> Self {
+        LineNumberParser { buf, i: 0 }
+    }
+
+    fn skip_escape_code(&mut self) {
+        if self.i < self.buf.len() {
+            let to_skip = skip_all_escape_code(&self.buf[self.i..]);
+            self.i += to_skip;
+        }
+    }
+
+    fn looking_at<M>(&mut self, matcher: M) -> bool
+    where
+        M: Fn(u8) -> bool,
+    {
+        self.skip_escape_code();
+        self.i < self.buf.len() && matcher(self.buf[self.i])
+    }
+
+    fn read_digit(&mut self) -> Option<usize> {
+        if self.looking_at(|x| x.is_ascii_digit()) {
+            let cur = self.buf[self.i];
+            self.i += 1;
+            Some((cur - b'0') as usize)
+        } else {
+            None
+        }
+    }
+
+    fn skip_whitespaces(&mut self) {
+        while self.looking_at(|x| x.is_ascii_whitespace()) {
+            self.i += 1;
+        }
+    }
+
+    fn expect_multiple<M>(&mut self, matcher: M) -> Option<usize>
+    where
+        M: Fn(u8) -> bool,
+    {
+        self.skip_escape_code();
+        let iorig = self.i;
+        while self.looking_at(&matcher) {
+            self.i += 1;
+        }
+        if self.i == iorig {
+            None
+        } else {
+            Some(self.i - iorig)
+        }
+    }
+
+    fn expect(&mut self, target: u8) -> Option<()> {
+        if self.looking_at(|x| x == target) {
+            self.i += 1;
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn parse_usize(&mut self) -> Option<usize> {
+        let mut res = 0usize;
+        let mut any = false;
+        while let Some(digit) = self.read_digit() {
+            any = true;
+            res = res.checked_mul(10)?;
+            res = res.checked_add(digit)?;
+        }
+        if any {
+            Some(res)
+        } else {
+            None
+        }
+    }
+
+    fn parse_pair(&mut self) -> Option<(usize, usize)> {
+        let p0 = self.parse_usize()?;
+        if self.expect(b',').is_none() {
+            return Some((0, p0));
+        }
+        let p1 = self.parse_usize()?;
+        Some((p0, p1))
+    }
+
+    fn parse_line_number(&mut self) -> Option<HunkHeader> {
+        self.skip_whitespaces();
+        self.expect_multiple(|x| x == b'@')?;
+        self.expect_multiple(|x| x.is_ascii_whitespace())?;
+        self.expect(b'-')?;
+        let minus_range = self.parse_pair()?;
+        self.expect_multiple(|x| x.is_ascii_whitespace())?;
+        self.expect(b'+')?;
+        let plus_range = self.parse_pair()?;
+        self.expect_multiple(|x| x.is_ascii_whitespace())?;
+        self.expect_multiple(|x| x == b'@')?;
+        Some(HunkHeader {
+            minus_range,
+            plus_range,
+        })
+    }
+}
+
+fn parse_line_number(buf: &[u8]) -> Option<HunkHeader> {
+    LineNumberParser::new(&buf).parse_line_number()
 }
 
 #[cfg(test)]
