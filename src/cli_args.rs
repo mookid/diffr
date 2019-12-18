@@ -18,6 +18,7 @@ diffr reads from standard input and write to standard output.
 
 pub const FLAG_DEBUG: &str = "--debug";
 pub const FLAG_COLOR: &str = "--colors";
+pub const FLAG_LINE_NUMBERS: &str = "--line-numbers";
 
 #[derive(Debug, Clone, Copy)]
 pub enum FaceName {
@@ -278,6 +279,11 @@ For example, the color_spec
 sets the color of unique added segments with
 a blue background, written with a bold font.",
                 ),
+        )
+        .arg(
+            Arg::with_name(FLAG_LINE_NUMBERS)
+                .long(FLAG_LINE_NUMBERS)
+                .help("Display line numbers."),
         )
         .get_matches()
 }

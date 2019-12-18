@@ -1,9 +1,7 @@
 use atty::{is, Stream};
 
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::{Error as FmtErr, Formatter};
-use std::io::{self, BufRead};
+use std::fmt::{Debug, Display, Error as FmtErr, Formatter};
+use std::io::{self, BufRead, Write};
 use std::iter::Peekable;
 use std::time::SystemTime;
 use termcolor::{
@@ -20,6 +18,7 @@ mod cli_args;
 #[derive(Debug)]
 pub struct AppConfig {
     debug: bool,
+    line_numbers: bool,
     added_face: ColorSpec,
     refine_added_face: ColorSpec,
     removed_face: ColorSpec,
@@ -30,6 +29,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         AppConfig {
             debug: false,
+            line_numbers: false,
             added_face: color_spec(Some(Green), None, false),
             refine_added_face: color_spec(Some(White), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
@@ -47,6 +47,7 @@ fn main() {
 
     let mut config = AppConfig::default();
     config.debug = matches.is_present(cli_args::FLAG_DEBUG);
+    config.line_numbers = matches.is_present(cli_args::FLAG_LINE_NUMBERS);
 
     if let Some(values) = matches.values_of(cli_args::FLAG_COLOR) {
         if let Err(err) = cli_args::parse_color_args(&mut config, values) {
@@ -92,7 +93,7 @@ fn try_main(config: AppConfig) -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
-    let mut hunk_buffer = HunkBuffer::new(config);
+    let mut hunk_buffer = HunkBuffer::new(&config);
     let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
     let mut in_hunk = false;
@@ -113,8 +114,8 @@ fn try_main(config: AppConfig) -> io::Result<()> {
                     hunk_buffer.process_with_stats(&mut stdout)?;
                 }
                 in_hunk = other == Some(b'@');
-                if in_hunk {
-                    hunk_buffer.line_number_info = dbg!(parse_line_number(&buffer));
+                if config.line_numbers && in_hunk {
+                    hunk_buffer.line_number_info = parse_line_number(&buffer);
                 }
                 output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
             }
@@ -213,14 +214,14 @@ impl ExecStats {
     }
 }
 
-struct HunkBuffer {
+struct HunkBuffer<'a> {
     v: Vec<isize>,
     diff_buffer: Vec<Snake>,
     added_tokens: Vec<HashedSpan>,
     removed_tokens: Vec<HashedSpan>,
     line_number_info: Option<HunkHeader>,
     lines: LineSplit,
-    config: AppConfig,
+    config: &'a AppConfig,
     stats: ExecStats,
 }
 
@@ -234,8 +235,10 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
     shared_spans
 }
 
-impl HunkBuffer {
-    fn new(config: AppConfig) -> Self {
+const MAX_MARGIN: usize = 41;
+
+impl<'a> HunkBuffer<'a> {
+    fn new(config: &'a AppConfig) -> Self {
         let debug = config.debug;
         HunkBuffer {
             v: vec![],
@@ -314,11 +317,28 @@ impl HunkBuffer {
             diff_buffer,
             added_tokens,
             removed_tokens,
-            line_number_info: _,
+            line_number_info,
             lines,
             config,
             stats,
         } = self;
+        let mut margin = [0u8; MAX_MARGIN];
+        let (mut current_line_minus, mut current_line_plus, margin, half_margin) =
+            match line_number_info {
+                Some(lni) => {
+                    let mut margin = &mut margin[..lni.width()];
+                    let half_margin = margin.len() / 2;
+
+                    // If line number is 0, the column is empty and shouldn't be
+                    // printed
+                    if lni.minus_range.0 == 0 || lni.plus_range.0 == 0 {
+                        margin = &mut margin[..half_margin];
+                    }
+
+                    (lni.minus_range.0, lni.plus_range.0, margin, half_margin)
+                }
+                None => Default::default(),
+            };
         let data = lines.data();
         let tokens = DiffInput {
             removed: Tokenization::new(lines.data(), removed_tokens),
@@ -361,6 +381,25 @@ impl HunkBuffer {
                             &mut shared_removed,
                         )
                     };
+
+                    if config.line_numbers {
+                        let mut margin_buf = &mut margin[..];
+                        if is_plus {
+                            if current_line_minus != 0 {
+                                write!(margin_buf, "{:w$} ", ' ', w = half_margin)?;
+                            }
+                            write!(margin_buf, "{:w$}", current_line_plus, w = half_margin)?;
+                            current_line_plus += 1;
+                        } else {
+                            write!(margin_buf, "{:w$}", current_line_minus, w = half_margin)?;
+                            if current_line_plus != 0 {
+                                write!(margin_buf, " {:w$}", ' ', w = half_margin)?;
+                            }
+                            current_line_minus += 1;
+                        };
+                        output(margin, 0, margin.len(), &nohighlight, out)?
+                    }
+
                     Self::paint_line(
                         toks.data(),
                         &(line_start, line_end),
@@ -370,7 +409,19 @@ impl HunkBuffer {
                         out,
                     )?;
                 }
-                _ => output(data, line_start, line_end, &ColorSpec::default(), out)?,
+                _ => {
+                    if config.line_numbers {
+                        if current_line_minus != current_line_plus {
+                            write!(out, "{:w$}", current_line_minus, w = half_margin)?;
+                        } else {
+                            write!(out, "{:w$}", ' ', w = half_margin)?;
+                        }
+                        write!(out, " {:w$}", current_line_plus, w = half_margin)?;
+                    }
+                    current_line_minus += 1;
+                    current_line_plus += 1;
+                    output(data, line_start, line_end, &ColorSpec::default(), out)?
+                }
             }
         }
         lines.clear();
@@ -545,17 +596,17 @@ fn width1(x: usize) -> usize {
 }
 
 impl HunkHeader {
-    fn new(mr_lo: usize, mr_len: usize, pr_lo: usize, pr_len: usize) -> Self {
+    fn new(minus_range: (usize, usize), plus_range: (usize, usize)) -> Self {
         HunkHeader {
-            minus_range: (mr_lo, mr_len),
-            plus_range: (pr_lo, pr_len),
+            minus_range,
+            plus_range,
         }
     }
 
     fn width(&self) -> usize {
-        width1(self.minus_range.0 + self.minus_range.1)
+        2 * width1(self.minus_range.0 + self.minus_range.1)
+            .max(width1(self.plus_range.0 + self.plus_range.1))
             + 1
-            + width1(self.plus_range.0 + self.plus_range.1)
     }
 }
 
@@ -658,7 +709,7 @@ impl<'a> LineNumberParser<'a> {
     fn parse_pair(&mut self) -> Option<(usize, usize)> {
         let p0 = self.parse_usize()?;
         if self.expect(b',').is_none() {
-            return Some((0, p0));
+            return Some((p0, 1));
         }
         let p1 = self.parse_usize()?;
         Some((p0, p1))
@@ -675,10 +726,7 @@ impl<'a> LineNumberParser<'a> {
         let plus_range = self.parse_pair()?;
         self.expect_multiple(|x| x.is_ascii_whitespace())?;
         self.expect_multiple(|x| x == b'@')?;
-        Some(HunkHeader {
-            minus_range,
-            plus_range,
-        })
+        Some(HunkHeader::new(minus_range, plus_range))
     }
 }
 

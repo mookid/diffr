@@ -42,9 +42,9 @@ fn parse_line_number_test() {
         assert_eq!(None, parse_line_number(input));
     };
     test_ok(133, 6, 133, 8, b"@@ -133,6 +133,8 @@");
-    test_ok(0, 0, 0, 1, b"@@ -0,0 +1 @@");
-    test_ok(0, 0, 0, 1, b"  @@ -0,0 +1 @@");
-    test_ok(0, 0, 0, 1, b"@@   -0,0 +1 @@");
+    test_ok(0, 0, 1, 1, b"@@ -0,0 +1 @@");
+    test_ok(0, 0, 1, 1, b"  @@ -0,0 +1 @@");
+    test_ok(0, 0, 1, 1, b"@@   -0,0 +1 @@");
     test_fail(b"@@-0,0 +1 @@");
     test_fail(b"@@ -0,0+1 @@");
     test_fail(b"@@ -0,0 +1@@");
@@ -57,7 +57,7 @@ fn parse_line_number_test() {
     test_fail(b"@@ -0,0 +19999999999999999999 @@");
 
     // with escape code
-    test_ok(0, 0, 0, 1, b"\x1b[42;43m@\x1b[42;43m@\x1b[42;43m \x1b[42;43m-\x1b[42;43m0\x1b[42;43m,\x1b[42;43m0\x1b[42;43m \x1b[42;43m+1 @@");
+    test_ok(0, 0, 1, 1, b"\x1b[42;43m@\x1b[42;43m@\x1b[42;43m \x1b[42;43m-\x1b[42;43m0\x1b[42;43m,\x1b[42;43m0\x1b[42;43m \x1b[42;43m+1 @@");
 }
 
 #[test]
@@ -77,12 +77,16 @@ fn test_width() {
     test(9999999999);
     test(10000000000);
     test(14284238234);
-    assert_eq!("123:456".len(), HunkHeader::new(123, 5, 456, 9).width());
-    assert_eq!("1122:456".len(), HunkHeader::new(123, 999, 456, 9).width());
-    assert_eq!(":456".len(), HunkHeader::new(0, 0, 456, 9).width());
-
     for i in 0..64 {
         test(1 << i);
     }
     test(usize::max_value());
+
+    assert_eq!("123:456".len(), HunkHeader::new((123, 5), (456, 9)).width());
+    assert_eq!(
+        "1122: 456".len(),
+        HunkHeader::new((123, 999), (456, 9)).width()
+    );
+    assert_eq!("   :456".len(), HunkHeader::new((0, 0), (456, 9)).width());
+    assert_eq!(MAX_MARGIN, 2 * width1(usize::max_value()) + 1);
 }
