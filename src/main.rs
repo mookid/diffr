@@ -115,7 +115,7 @@ fn try_main(config: AppConfig) -> io::Result<()> {
                 }
                 in_hunk = other == Some(b'@');
                 if in_hunk {
-                    hunk_buffer.line_number_info = dbg!(parse_line_number(&buffer));
+                    hunk_buffer.line_number_info = parse_line_number(&buffer);
                 }
                 output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
             }
@@ -235,6 +235,11 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
     shared_spans
 }
 
+// 2 * width1(usize::max_value()) + 1
+const MAX_MARGIN: usize = 41;
+// const MARGIN_SEP: u8 = b':';
+const MARGIN_SEP: char = ':';
+
 impl HunkBuffer {
     fn new(config: AppConfig) -> Self {
         let debug = config.debug;
@@ -315,11 +320,32 @@ impl HunkBuffer {
             diff_buffer,
             added_tokens,
             removed_tokens,
-            line_number_info: _,
+            line_number_info,
             lines,
             config,
             stats,
         } = self;
+        let mut margin = [0u8; MAX_MARGIN];
+        // line_number_info
+        //     .as_ref()
+        //     .map(|lni| {
+        //         let w = lni.width();
+        //         &mut margin[..w]
+        //     })
+        //     .unwrap_or_default();
+        // let mut current_line_plus;
+        // let mut current_line_minus;
+        let (mut current_line_plus, mut current_line_minus, /* mut */ margin) =
+            match line_number_info {
+                Some(lni) => (
+                    lni.minus_range.0,
+                    lni.plus_range.0,
+                    &mut margin[..lni.width()],
+                ),
+                None => Default::default(),
+            };
+        // let half_margin = (margin.len() + 1) / 2;
+        let half_margin = margin.len() / 2;
         let data = lines.data();
         let tokens = DiffInput {
             removed: Tokenization::new(lines.data(), removed_tokens),
@@ -347,8 +373,9 @@ impl HunkBuffer {
             match first {
                 b'-' | b'+' => {
                     let is_plus = first == b'+';
-                    let (nohighlight, highlight, toks, shared) = if is_plus {
+                    let (lino, nohighlight, highlight, toks, shared) = if is_plus {
                         (
+                            &mut current_line_plus,
                             &config.added_face,
                             &config.refine_added_face,
                             &tokens.added,
@@ -356,12 +383,24 @@ impl HunkBuffer {
                         )
                     } else {
                         (
+                            &mut current_line_minus,
                             &config.removed_face,
                             &config.refine_removed_face,
                             &tokens.removed,
                             &mut shared_removed,
                         )
                     };
+                    *lino += 1;
+                    if is_plus {
+                        write!(out, "{:w$}", ' ', w = half_margin)?;
+                        write!(out, "{}", MARGIN_SEP)?;
+                        write!(out, "{:w$}", lino, w = half_margin)?;
+                    } else {
+                        write!(out, "{:w$}", lino, w = half_margin)?;
+                        write!(out, "{}", MARGIN_SEP)?;
+                        write!(out, "{:w$}", ' ', w = half_margin)?;
+                    };
+
                     Self::paint_line(
                         toks.data(),
                         &(line_start, line_end),
@@ -371,7 +410,18 @@ impl HunkBuffer {
                         out,
                     )?;
                 }
-                _ => output(data, line_start, line_end, &ColorSpec::default(), out)?,
+                _ => {
+                    current_line_minus += 1;
+                    current_line_plus += 1;
+                    if current_line_minus != current_line_plus {
+                        write!(out, "{:w$}", current_line_minus, w = half_margin)?;
+                    } else {
+                        write!(out, "{:w$}", ' ', w = half_margin)?;
+                    }
+                    write!(out, "{}", MARGIN_SEP)?;
+                    write!(out, "{:w$}", current_line_plus, w = half_margin)?;
+                    output(data, line_start, line_end, &ColorSpec::default(), out)?
+                }
             }
         }
         lines.clear();
@@ -555,9 +605,9 @@ impl HunkHeader {
     }
 
     fn width(&self) -> usize {
-        width1(self.minus_range.0 + self.minus_range.1)
+        2 * width1(self.minus_range.0 + self.minus_range.1)
+            .max(width1(self.plus_range.0 + self.plus_range.1))
             + 1
-            + width1(self.plus_range.0 + self.plus_range.1)
     }
 }
 
@@ -687,6 +737,15 @@ impl<'a> LineNumberParser<'a> {
 fn parse_line_number(buf: &[u8]) -> Option<HunkHeader> {
     LineNumberParser::new(&buf).parse_line_number()
 }
+
+// fn write_usize(buf: &mut [u8], n: usize) -> usize {
+//     0
+// }
+
+// fn write_byte(buf: &mut [u8], ch: u8) -> usize {
+//     buf[0] = ch;
+//     1
+// }
 
 #[cfg(test)]
 mod test;
