@@ -335,7 +335,7 @@ impl HunkBuffer {
         //     .unwrap_or_default();
         // let mut current_line_plus;
         // let mut current_line_minus;
-        let (mut current_line_plus, mut current_line_minus, /* mut */ margin) =
+        let (mut current_line_minus, mut current_line_plus, /* mut */ margin) =
             match line_number_info {
                 Some(lni) => (
                     lni.minus_range.0,
@@ -390,7 +390,6 @@ impl HunkBuffer {
                             &mut shared_removed,
                         )
                     };
-                    *lino += 1;
                     if is_plus {
                         write!(out, "{:w$}", ' ', w = half_margin)?;
                         write!(out, "{}", MARGIN_SEP)?;
@@ -400,6 +399,7 @@ impl HunkBuffer {
                         write!(out, "{}", MARGIN_SEP)?;
                         write!(out, "{:w$}", ' ', w = half_margin)?;
                     };
+                    *lino += 1;
 
                     Self::paint_line(
                         toks.data(),
@@ -411,8 +411,6 @@ impl HunkBuffer {
                     )?;
                 }
                 _ => {
-                    current_line_minus += 1;
-                    current_line_plus += 1;
                     if current_line_minus != current_line_plus {
                         write!(out, "{:w$}", current_line_minus, w = half_margin)?;
                     } else {
@@ -420,6 +418,8 @@ impl HunkBuffer {
                     }
                     write!(out, "{}", MARGIN_SEP)?;
                     write!(out, "{:w$}", current_line_plus, w = half_margin)?;
+                    current_line_minus += 1;
+                    current_line_plus += 1;
                     output(data, line_start, line_end, &ColorSpec::default(), out)?
                 }
             }
