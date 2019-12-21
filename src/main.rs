@@ -1,5 +1,6 @@
 use atty::{is, Stream};
 
+use std::cmp;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::{Error as FmtErr, Formatter};
@@ -239,6 +240,9 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
 }
 
 // 2 * width1(usize::max_value()) + 1
+// Assuming most files are less than 1000 lines,
+// pad for two 3 digit numbers plus the separator
+const MIN_MARGIN: usize = 7;
 const MAX_MARGIN: usize = 41;
 // const MARGIN_SEP: u8 = b':';
 const MARGIN_SEP: char = ':';
@@ -343,7 +347,7 @@ impl HunkBuffer {
                 Some(lni) => (
                     lni.minus_range.0,
                     lni.plus_range.0,
-                    &mut margin[..lni.width()],
+                    &mut margin[..cmp::max(MIN_MARGIN, lni.width())],
                 ),
                 None => Default::default(),
             };
