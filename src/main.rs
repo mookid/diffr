@@ -560,7 +560,7 @@ struct HunkHeader {
     plus_range: (usize, usize),
 }
 
-const WIDTH: [usize; 21] = [
+const WIDTH: [usize; 20] = [
     0,
     9,
     99,
@@ -581,11 +581,10 @@ const WIDTH: [usize; 21] = [
     99999999999999999,
     999999999999999999,
     9999999999999999999,
-    usize::max_value(),
 ];
 
 fn width1(x: usize) -> usize {
-    let result = WIDTH[..WIDTH.len() - 1].binary_search(&x);
+    let result = WIDTH.binary_search(&x);
     match result {
         Ok(i) | Err(i) => i,
     }
