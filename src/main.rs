@@ -395,15 +395,17 @@ impl HunkBuffer {
                     };
 
                     if config.line_numbers {
+                        out.set_color(nohighlight)?;
                         if is_plus {
                             write!(out, "{:w$}", ' ', w = half_margin)?;
                             write!(out, "{}", MARGIN_SEP)?;
-                            write!(out, "{:w$}", lino, w = half_margin)?;
+                            write!(out, "{:w$} ", lino, w = half_margin)?;
                         } else {
                             write!(out, "{:w$}", lino, w = half_margin)?;
                             write!(out, "{}", MARGIN_SEP)?;
-                            write!(out, "{:w$}", ' ', w = half_margin)?;
+                            write!(out, "{:w$} ", ' ', w = half_margin)?;
                         };
+                        out.reset()?;
                     }
                     *lino += 1;
 
@@ -424,7 +426,7 @@ impl HunkBuffer {
                             write!(out, "{:w$}", ' ', w = half_margin)?;
                         }
                         write!(out, "{}", MARGIN_SEP)?;
-                        write!(out, "{:w$}", current_line_plus, w = half_margin)?;
+                        write!(out, "{:w$} ", current_line_plus, w = half_margin)?;
                     }
                     current_line_minus += 1;
                     current_line_plus += 1;
