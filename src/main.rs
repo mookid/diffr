@@ -20,6 +20,7 @@ mod cli_args;
 #[derive(Debug)]
 pub struct AppConfig {
     debug: bool,
+    line_numbers: bool,
     added_face: ColorSpec,
     refine_added_face: ColorSpec,
     removed_face: ColorSpec,
@@ -30,6 +31,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         AppConfig {
             debug: false,
+            line_numbers: false,
             added_face: color_spec(Some(Green), None, false),
             refine_added_face: color_spec(Some(White), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
@@ -47,6 +49,7 @@ fn main() {
 
     let mut config = AppConfig::default();
     config.debug = matches.is_present(cli_args::FLAG_DEBUG);
+    config.line_numbers = matches.is_present(cli_args::FLAG_LINE_NUMBERS);
 
     if let Some(values) = matches.values_of(cli_args::FLAG_COLOR) {
         if let Err(err) = cli_args::parse_color_args(&mut config, values) {
@@ -390,15 +393,18 @@ impl HunkBuffer {
                             &mut shared_removed,
                         )
                     };
-                    if is_plus {
-                        write!(out, "{:w$}", ' ', w = half_margin)?;
-                        write!(out, "{}", MARGIN_SEP)?;
-                        write!(out, "{:w$}", lino, w = half_margin)?;
-                    } else {
-                        write!(out, "{:w$}", lino, w = half_margin)?;
-                        write!(out, "{}", MARGIN_SEP)?;
-                        write!(out, "{:w$}", ' ', w = half_margin)?;
-                    };
+
+                    if config.line_numbers {
+                        if is_plus {
+                            write!(out, "{:w$}", ' ', w = half_margin)?;
+                            write!(out, "{}", MARGIN_SEP)?;
+                            write!(out, "{:w$}", lino, w = half_margin)?;
+                        } else {
+                            write!(out, "{:w$}", lino, w = half_margin)?;
+                            write!(out, "{}", MARGIN_SEP)?;
+                            write!(out, "{:w$}", ' ', w = half_margin)?;
+                        };
+                    }
                     *lino += 1;
 
                     Self::paint_line(
@@ -411,13 +417,15 @@ impl HunkBuffer {
                     )?;
                 }
                 _ => {
-                    if current_line_minus != current_line_plus {
-                        write!(out, "{:w$}", current_line_minus, w = half_margin)?;
-                    } else {
-                        write!(out, "{:w$}", ' ', w = half_margin)?;
+                    if config.line_numbers {
+                        if current_line_minus != current_line_plus {
+                            write!(out, "{:w$}", current_line_minus, w = half_margin)?;
+                        } else {
+                            write!(out, "{:w$}", ' ', w = half_margin)?;
+                        }
+                        write!(out, "{}", MARGIN_SEP)?;
+                        write!(out, "{:w$}", current_line_plus, w = half_margin)?;
                     }
-                    write!(out, "{}", MARGIN_SEP)?;
-                    write!(out, "{:w$}", current_line_plus, w = half_margin)?;
                     current_line_minus += 1;
                     current_line_plus += 1;
                     output(data, line_start, line_end, &ColorSpec::default(), out)?
