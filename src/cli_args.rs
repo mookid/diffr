@@ -283,7 +283,7 @@ a blue background, written with a bold font.",
         .arg(
             Arg::with_name(FLAG_LINE_NUMBERS)
                 .long(FLAG_LINE_NUMBERS)
-                .help("Display line numbers.")
+                .help("Display line numbers."),
         )
         .get_matches()
 }

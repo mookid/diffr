@@ -1,9 +1,7 @@
 use atty::{is, Stream};
 
 use std::cmp;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::fmt::{Error as FmtErr, Formatter};
+use std::fmt::{Debug, Display, Error as FmtErr, Formatter};
 use std::io::{self, BufRead};
 use std::iter::Peekable;
 use std::time::SystemTime;
@@ -239,12 +237,10 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
     shared_spans
 }
 
-// 2 * width1(usize::max_value()) + 1
 // Assuming most files are less than 1000 lines,
 // pad for two 3 digit numbers plus the separator
 const MIN_MARGIN: usize = 7;
 const MAX_MARGIN: usize = 41;
-// const MARGIN_SEP: u8 = b':';
 const MARGIN_SEP: char = ':';
 
 impl HunkBuffer {
@@ -333,25 +329,14 @@ impl HunkBuffer {
             stats,
         } = self;
         let mut margin = [0u8; MAX_MARGIN];
-        // line_number_info
-        //     .as_ref()
-        //     .map(|lni| {
-        //         let w = lni.width();
-        //         &mut margin[..w]
-        //     })
-        //     .unwrap_or_default();
-        // let mut current_line_plus;
-        // let mut current_line_minus;
-        let (mut current_line_minus, mut current_line_plus, /* mut */ margin) =
-            match line_number_info {
-                Some(lni) => (
-                    lni.minus_range.0,
-                    lni.plus_range.0,
-                    &mut margin[..cmp::max(MIN_MARGIN, lni.width())],
-                ),
-                None => Default::default(),
-            };
-        // let half_margin = (margin.len() + 1) / 2;
+        let (mut current_line_minus, mut current_line_plus, margin) = match line_number_info {
+            Some(lni) => (
+                lni.minus_range.0,
+                lni.plus_range.0,
+                &mut margin[..cmp::max(MIN_MARGIN, lni.width())],
+            ),
+            None => Default::default(),
+        };
         let half_margin = margin.len() / 2;
         let data = lines.data();
         let tokens = DiffInput {
@@ -401,13 +386,9 @@ impl HunkBuffer {
                     if config.line_numbers {
                         out.set_color(nohighlight)?;
                         if is_plus {
-                            write!(out, "{:w$}", ' ', w = half_margin)?;
-                            write!(out, "{}", MARGIN_SEP)?;
-                            write!(out, "{:w$} ", lino, w = half_margin)?;
+                            write!(out, "{:w$}{}{:w$} ", ' ', MARGIN_SEP, lino, w = half_margin)?;
                         } else {
-                            write!(out, "{:w$}", lino, w = half_margin)?;
-                            write!(out, "{}", MARGIN_SEP)?;
-                            write!(out, "{:w$} ", ' ', w = half_margin)?;
+                            write!(out, "{:w$}{}{:w$} ", lino, MARGIN_SEP, ' ', w = half_margin)?;
                         };
                         out.reset()?;
                     }
@@ -611,10 +592,10 @@ fn width1(x: usize) -> usize {
 }
 
 impl HunkHeader {
-    fn new(mr_lo: usize, mr_len: usize, pr_lo: usize, pr_len: usize) -> Self {
+    fn new(minus_range: (usize, usize), plus_range: (usize, usize)) -> Self {
         HunkHeader {
-            minus_range: (mr_lo, mr_len),
-            plus_range: (pr_lo, pr_len),
+            minus_range,
+            plus_range,
         }
     }
 
@@ -741,25 +722,13 @@ impl<'a> LineNumberParser<'a> {
         let plus_range = self.parse_pair()?;
         self.expect_multiple(|x| x.is_ascii_whitespace())?;
         self.expect_multiple(|x| x == b'@')?;
-        Some(HunkHeader {
-            minus_range,
-            plus_range,
-        })
+        Some(HunkHeader::new(minus_range, plus_range))
     }
 }
 
 fn parse_line_number(buf: &[u8]) -> Option<HunkHeader> {
     LineNumberParser::new(&buf).parse_line_number()
 }
-
-// fn write_usize(buf: &mut [u8], n: usize) -> usize {
-//     0
-// }
-
-// fn write_byte(buf: &mut [u8], ch: u8) -> usize {
-//     buf[0] = ch;
-//     1
-// }
 
 #[cfg(test)]
 mod test;

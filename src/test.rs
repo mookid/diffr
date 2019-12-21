@@ -82,8 +82,11 @@ fn test_width() {
     }
     test(usize::max_value());
 
-    assert_eq!("123:456".len(), HunkHeader::new(123, 5, 456, 9).width());
-    assert_eq!("1122: 456".len(), HunkHeader::new(123, 999, 456, 9).width());
-    assert_eq!("   :456".len(), HunkHeader::new(0, 0, 456, 9).width());
+    assert_eq!("123:456".len(), HunkHeader::new((123, 5), (456, 9)).width());
+    assert_eq!(
+        "1122: 456".len(),
+        HunkHeader::new((123, 999), (456, 9)).width()
+    );
+    assert_eq!("   :456".len(), HunkHeader::new((0, 0), (456, 9)).width());
     assert_eq!(MAX_MARGIN, 2 * width1(usize::max_value()) + 1);
 }
