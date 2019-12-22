@@ -1,6 +1,5 @@
 use atty::{is, Stream};
 
-use std::cmp;
 use std::fmt::{Debug, Display, Error as FmtErr, Formatter};
 use std::io::{self, BufRead};
 use std::iter::Peekable;
@@ -97,7 +96,6 @@ fn try_main(config: AppConfig) -> io::Result<()> {
     let mut hunk_buffer = HunkBuffer::new(config);
     let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
-    // TODO combine with hunk_buffer.line_number_info
     let mut in_hunk = false;
 
     // process hunks
@@ -333,7 +331,7 @@ impl HunkBuffer {
             Some(lni) => (
                 lni.minus_range.0,
                 lni.plus_range.0,
-                &mut margin[..cmp::max(MIN_MARGIN, lni.width())],
+                &mut margin[..lni.width().max(MIN_MARGIN)],
             ),
             None => Default::default(),
         };
