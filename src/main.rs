@@ -93,7 +93,7 @@ fn try_main(config: AppConfig) -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let mut buffer = vec![];
-    let mut hunk_buffer = HunkBuffer::new(config);
+    let mut hunk_buffer = HunkBuffer::new(&config);
     let mut stdin = stdin.lock();
     let mut stdout = stdout.lock();
     let mut in_hunk = false;
@@ -114,7 +114,7 @@ fn try_main(config: AppConfig) -> io::Result<()> {
                     hunk_buffer.process_with_stats(&mut stdout)?;
                 }
                 in_hunk = other == Some(b'@');
-                if in_hunk {
+                if config.line_numbers && in_hunk {
                     hunk_buffer.line_number_info = parse_line_number(&buffer);
                 }
                 output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
@@ -214,14 +214,14 @@ impl ExecStats {
     }
 }
 
-struct HunkBuffer {
+struct HunkBuffer<'a> {
     v: Vec<isize>,
     diff_buffer: Vec<Snake>,
     added_tokens: Vec<HashedSpan>,
     removed_tokens: Vec<HashedSpan>,
     line_number_info: Option<HunkHeader>,
     lines: LineSplit,
-    config: AppConfig,
+    config: &'a AppConfig,
     stats: ExecStats,
 }
 
@@ -241,8 +241,8 @@ const MIN_MARGIN: usize = 7;
 const MAX_MARGIN: usize = 41;
 const MARGIN_SEP: char = ':';
 
-impl HunkBuffer {
-    fn new(config: AppConfig) -> Self {
+impl<'a> HunkBuffer<'a> {
+    fn new(config: &'a AppConfig) -> Self {
         let debug = config.debug;
         HunkBuffer {
             v: vec![],
