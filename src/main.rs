@@ -235,9 +235,6 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
     shared_spans
 }
 
-// Assuming most files are less than 1000 lines,
-// pad for two 3 digit numbers plus the separator
-const MIN_MARGIN: usize = 7;
 const MAX_MARGIN: usize = 41;
 const MARGIN_SEP: char = ':';
 
@@ -331,7 +328,7 @@ impl<'a> HunkBuffer<'a> {
             Some(lni) => (
                 lni.minus_range.0,
                 lni.plus_range.0,
-                &mut margin[..lni.width().max(MIN_MARGIN)],
+                &mut margin[..lni.width()],
             ),
             None => Default::default(),
         };
@@ -384,9 +381,9 @@ impl<'a> HunkBuffer<'a> {
                     if config.line_numbers {
                         out.set_color(nohighlight)?;
                         if is_plus {
-                            write!(out, "{:w$}{}{:w$} ", ' ', MARGIN_SEP, lino, w = half_margin)?;
+                            write!(out, "{:w$}{}{:w$}", ' ', MARGIN_SEP, lino, w = half_margin)?;
                         } else {
-                            write!(out, "{:w$}{}{:w$} ", lino, MARGIN_SEP, ' ', w = half_margin)?;
+                            write!(out, "{:w$}{}{:w$}", lino, MARGIN_SEP, ' ', w = half_margin)?;
                         };
                         out.reset()?;
                     }
@@ -409,7 +406,7 @@ impl<'a> HunkBuffer<'a> {
                             write!(out, "{:w$}", ' ', w = half_margin)?;
                         }
                         write!(out, "{}", MARGIN_SEP)?;
-                        write!(out, "{:w$} ", current_line_plus, w = half_margin)?;
+                        write!(out, "{:w$}", current_line_plus, w = half_margin)?;
                     }
                     current_line_minus += 1;
                     current_line_plus += 1;
