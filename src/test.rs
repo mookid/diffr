@@ -42,9 +42,9 @@ fn parse_line_number_test() {
         assert_eq!(None, parse_line_number(input));
     };
     test_ok(133, 6, 133, 8, b"@@ -133,6 +133,8 @@");
-    test_ok(0, 0, 0, 1, b"@@ -0,0 +1 @@");
-    test_ok(0, 0, 0, 1, b"  @@ -0,0 +1 @@");
-    test_ok(0, 0, 0, 1, b"@@   -0,0 +1 @@");
+    test_ok(0, 0, 1, 1, b"@@ -0,0 +1 @@");
+    test_ok(0, 0, 1, 1, b"  @@ -0,0 +1 @@");
+    test_ok(0, 0, 1, 1, b"@@   -0,0 +1 @@");
     test_fail(b"@@-0,0 +1 @@");
     test_fail(b"@@ -0,0+1 @@");
     test_fail(b"@@ -0,0 +1@@");
@@ -57,7 +57,7 @@ fn parse_line_number_test() {
     test_fail(b"@@ -0,0 +19999999999999999999 @@");
 
     // with escape code
-    test_ok(0, 0, 0, 1, b"\x1b[42;43m@\x1b[42;43m@\x1b[42;43m \x1b[42;43m-\x1b[42;43m0\x1b[42;43m,\x1b[42;43m0\x1b[42;43m \x1b[42;43m+1 @@");
+    test_ok(0, 0, 1, 1, b"\x1b[42;43m@\x1b[42;43m@\x1b[42;43m \x1b[42;43m-\x1b[42;43m0\x1b[42;43m,\x1b[42;43m0\x1b[42;43m \x1b[42;43m+1 @@");
 }
 
 #[test]

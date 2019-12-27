@@ -699,7 +699,7 @@ impl<'a> LineNumberParser<'a> {
     fn parse_pair(&mut self) -> Option<(usize, usize)> {
         let p0 = self.parse_usize()?;
         if self.expect(b',').is_none() {
-            return Some((0, p0));
+            return Some((p0, 1));
         }
         let p1 = self.parse_usize()?;
         Some((p0, p1))
