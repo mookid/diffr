@@ -1,7 +1,7 @@
 use atty::{is, Stream};
 
 use std::fmt::{Debug, Display, Error as FmtErr, Formatter};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 use std::iter::Peekable;
 use std::time::SystemTime;
 use termcolor::{
@@ -324,15 +324,22 @@ impl<'a> HunkBuffer<'a> {
             stats,
         } = self;
         let mut margin = [0u8; MAX_MARGIN];
-        let (mut current_line_minus, mut current_line_plus, margin) = match line_number_info {
-            Some(lni) => (
-                lni.minus_range.0,
-                lni.plus_range.0,
-                &mut margin[..lni.width()],
-            ),
-            None => Default::default(),
-        };
-        let half_margin = margin.len() / 2;
+        let (mut current_line_minus, mut current_line_plus, margin, half_margin) =
+            match line_number_info {
+                Some(lni) => {
+                    let mut margin = &mut margin[..lni.width()];
+                    let half_margin = margin.len() / 2;
+
+                    // If line number is 0, the column is empty and shouldn't be
+                    // printed
+                    if lni.minus_range.0 == 0 || lni.plus_range.0 == 0 {
+                        margin = &mut margin[..half_margin];
+                    }
+
+                    (lni.minus_range.0, lni.plus_range.0, margin, half_margin)
+                }
+                None => Default::default(),
+            };
         let data = lines.data();
         let tokens = DiffInput {
             removed: Tokenization::new(lines.data(), removed_tokens),
@@ -377,24 +384,21 @@ impl<'a> HunkBuffer<'a> {
                     };
 
                     if config.line_numbers {
-                        out.set_color(nohighlight)?;
+                        let mut margin_buf = &mut margin[..];
                         if is_plus {
-                            // If line number is 0, the column is empty and shouldn't be
-                            // printed
                             if current_line_minus != 0 {
-                                write!(out, "{:w$}{}", ' ', MARGIN_SEP, w = half_margin)?;
+                                write!(margin_buf, "{:w$}{}", ' ', MARGIN_SEP, w = half_margin)?;
                             }
-                            write!(out, "{:w$}", current_line_plus, w = half_margin)?;
+                            write!(margin_buf, "{:w$}", current_line_plus, w = half_margin)?;
                             current_line_plus += 1;
                         } else {
-                            write!(out, "{:w$}", current_line_minus, w = half_margin)?;
-                            // Same as above
+                            write!(margin_buf, "{:w$}", current_line_minus, w = half_margin)?;
                             if current_line_plus != 0 {
-                                write!(out, "{}{:w$}", MARGIN_SEP, ' ', w = half_margin)?;
+                                write!(margin_buf, "{}{:w$}", MARGIN_SEP, ' ', w = half_margin)?;
                             }
                             current_line_minus += 1;
                         };
-                        out.reset()?;
+                        output(margin, 0, margin.len(), &nohighlight, out)?
                     }
 
                     Self::paint_line(
