@@ -236,7 +236,7 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
 }
 
 const MAX_MARGIN: usize = 41;
-const MARGIN_SEP: char = ':';
+const MARGIN_SEP: char = ' ';
 
 impl<'a> HunkBuffer<'a> {
     fn new(config: &'a AppConfig) -> Self {
