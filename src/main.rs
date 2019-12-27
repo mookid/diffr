@@ -360,9 +360,8 @@ impl<'a> HunkBuffer<'a> {
             match first {
                 b'-' | b'+' => {
                     let is_plus = first == b'+';
-                    let (lino, nohighlight, highlight, toks, shared) = if is_plus {
+                    let (nohighlight, highlight, toks, shared) = if is_plus {
                         (
-                            &mut current_line_plus,
                             &config.added_face,
                             &config.refine_added_face,
                             &tokens.added,
@@ -370,7 +369,6 @@ impl<'a> HunkBuffer<'a> {
                         )
                     } else {
                         (
-                            &mut current_line_minus,
                             &config.removed_face,
                             &config.refine_removed_face,
                             &tokens.removed,
@@ -381,13 +379,23 @@ impl<'a> HunkBuffer<'a> {
                     if config.line_numbers {
                         out.set_color(nohighlight)?;
                         if is_plus {
-                            write!(out, "{:w$}{}{:w$}", ' ', MARGIN_SEP, lino, w = half_margin)?;
+                            // If line number is 0, the column is empty and shouldn't be
+                            // printed
+                            if current_line_minus != 0 {
+                                write!(out, "{:w$}{}", ' ', MARGIN_SEP, w = half_margin)?;
+                            }
+                            write!(out, "{:w$}", current_line_plus, w = half_margin)?;
+                            current_line_plus += 1;
                         } else {
-                            write!(out, "{:w$}{}{:w$}", lino, MARGIN_SEP, ' ', w = half_margin)?;
+                            write!(out, "{:w$}", current_line_minus, w = half_margin)?;
+                            // Same as above
+                            if current_line_plus != 0 {
+                                write!(out, "{}{:w$}", MARGIN_SEP, ' ', w = half_margin)?;
+                            }
+                            current_line_minus += 1;
                         };
                         out.reset()?;
                     }
-                    *lino += 1;
 
                     Self::paint_line(
                         toks.data(),
