@@ -236,7 +236,6 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<Ha
 }
 
 const MAX_MARGIN: usize = 41;
-const MARGIN_SEP: char = ' ';
 
 impl<'a> HunkBuffer<'a> {
     fn new(config: &'a AppConfig) -> Self {
@@ -387,14 +386,14 @@ impl<'a> HunkBuffer<'a> {
                         let mut margin_buf = &mut margin[..];
                         if is_plus {
                             if current_line_minus != 0 {
-                                write!(margin_buf, "{:w$}{}", ' ', MARGIN_SEP, w = half_margin)?;
+                                write!(margin_buf, "{:w$} ", ' ', w = half_margin)?;
                             }
                             write!(margin_buf, "{:w$}", current_line_plus, w = half_margin)?;
                             current_line_plus += 1;
                         } else {
                             write!(margin_buf, "{:w$}", current_line_minus, w = half_margin)?;
                             if current_line_plus != 0 {
-                                write!(margin_buf, "{}{:w$}", MARGIN_SEP, ' ', w = half_margin)?;
+                                write!(margin_buf, " {:w$}", ' ', w = half_margin)?;
                             }
                             current_line_minus += 1;
                         };
@@ -417,8 +416,7 @@ impl<'a> HunkBuffer<'a> {
                         } else {
                             write!(out, "{:w$}", ' ', w = half_margin)?;
                         }
-                        write!(out, "{}", MARGIN_SEP)?;
-                        write!(out, "{:w$}", current_line_plus, w = half_margin)?;
+                        write!(out, " {:w$}", current_line_plus, w = half_margin)?;
                     }
                     current_line_minus += 1;
                     current_line_plus += 1;
