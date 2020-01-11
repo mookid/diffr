@@ -111,6 +111,7 @@ enum FaceColor {
 #[derive(Debug, Clone, Copy)]
 enum AttributeName {
     Color(FaceColor),
+    Italic(bool),
     Bold(bool),
     Intense(bool),
     Underline(bool),
@@ -123,6 +124,8 @@ impl EnumString for AttributeName {
         &[
             ("foreground", Color(FaceColor::Foreground)),
             ("background", Color(FaceColor::Background)),
+            ("italic", Italic(true)),
+            ("noitalic", Italic(false)),
             ("bold", Bold(true)),
             ("nobold", Bold(false)),
             ("intense", Intense(true)),
@@ -197,6 +200,7 @@ where
                     return Err(ArgParsingError::MissingValue(face_name));
                 }
             }
+            Italic(italic) => ignore(face.set_italic(italic)),
             Bold(bold) => ignore(face.set_bold(bold)),
             Intense(intense) => ignore(face.set_intense(intense)),
             Underline(underline) => ignore(face.set_underline(underline)),
@@ -264,8 +268,12 @@ color_spec = face-name + ':' + attributes
 attributes = attribute
            | attribute + ':' + attributes
 attribute  = ('foreground' | 'background') + ':' + color
-           | (<empty> | 'no') + ('bold' | 'intense' | 'underline')
+           | (<empty> | 'no') + font-flag
            | 'none'
+font-flag  = 'italic'
+           | 'bold'
+           | 'intense'
+           | 'underline'
 color      = 'none'
            | [0-255]
            | [0-255] + ',' + [0-255] + ',' + [0-255]
