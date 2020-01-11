@@ -56,7 +56,8 @@ fn main() {
         }
     }
 
-    match try_main(config) {
+    let mut hunk_buffer = HunkBuffer::new(&config);
+    match hunk_buffer.run() {
         Ok(()) => (),
         Err(ref err) if err.kind() == io::ErrorKind::BrokenPipe => (),
         Err(ref err) => {
@@ -87,47 +88,6 @@ fn duration_ms_since(time: &Option<SystemTime>) -> u128 {
     } else {
         0
     }
-}
-
-fn try_main(config: AppConfig) -> io::Result<()> {
-    let stdin = io::stdin();
-    let stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut buffer = vec![];
-    let mut hunk_buffer = HunkBuffer::new(&config);
-    let mut stdin = stdin.lock();
-    let mut stdout = stdout.lock();
-    let mut in_hunk = false;
-
-    // process hunks
-    loop {
-        stdin.read_until(b'\n', &mut buffer)?;
-        if buffer.is_empty() {
-            break;
-        }
-
-        match (in_hunk, first_after_escape(&buffer)) {
-            (true, Some(b'+')) => hunk_buffer.push_added(&buffer),
-            (true, Some(b'-')) => hunk_buffer.push_removed(&buffer),
-            (true, Some(b' ')) => add_raw_line(&mut hunk_buffer.lines, &buffer),
-            (_, other) => {
-                if in_hunk {
-                    hunk_buffer.process_with_stats(&mut stdout)?;
-                }
-                in_hunk = other == Some(b'@');
-                if config.line_numbers && in_hunk {
-                    hunk_buffer.line_number_info = parse_line_number(&buffer);
-                }
-                output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
-            }
-        }
-        buffer.clear();
-    }
-
-    // flush remaining hunk
-    hunk_buffer.process_with_stats(&mut stdout)?;
-    hunk_buffer.stats.stop();
-    hunk_buffer.stats.report()?;
-    Ok(())
 }
 
 fn color_spec(fg: Option<Color>, bg: Option<Color>, bold: bool) -> ColorSpec {
@@ -350,8 +310,8 @@ impl<'a> HunkBuffer<'a> {
             };
         let data = lines.data();
         let tokens = DiffInput {
-            removed: Tokenization::new(lines.data(), removed_tokens),
-            added: Tokenization::new(lines.data(), added_tokens),
+            removed: Tokenization::new(data, removed_tokens),
+            added: Tokenization::new(data, added_tokens),
         };
         let start = now(stats.do_timings());
         diffr_lib::diff(&tokens, v, diff_buffer);
@@ -463,6 +423,46 @@ impl<'a> HunkBuffer<'a> {
                 &mut self.removed_tokens
             },
         );
+    }
+
+    fn run(&mut self) -> io::Result<()> {
+        let stdin = io::stdin();
+        let stdout = StandardStream::stdout(ColorChoice::Always);
+        let mut buffer = vec![];
+        let mut stdin = stdin.lock();
+        let mut stdout = stdout.lock();
+        let mut in_hunk = false;
+
+        // process hunks
+        loop {
+            stdin.read_until(b'\n', &mut buffer)?;
+            if buffer.is_empty() {
+                break;
+            }
+
+            match (in_hunk, first_after_escape(&buffer)) {
+                (true, Some(b'+')) => self.push_added(&buffer),
+                (true, Some(b'-')) => self.push_removed(&buffer),
+                (true, Some(b' ')) => add_raw_line(&mut self.lines, &buffer),
+                (_, other) => {
+                    if in_hunk {
+                        self.process_with_stats(&mut stdout)?;
+                    }
+                    in_hunk = other == Some(b'@');
+                    if self.config.line_numbers && in_hunk {
+                        self.line_number_info = parse_line_number(&buffer);
+                    }
+                    output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
+                }
+            }
+            buffer.clear();
+        }
+
+        // flush remaining hunk
+        self.process_with_stats(&mut stdout)?;
+        self.stats.stop();
+        self.stats.report()?;
+        Ok(())
     }
 }
 
