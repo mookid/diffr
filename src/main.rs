@@ -222,6 +222,7 @@ struct HunkBuffer<'a> {
     line_number_info: Option<HunkHeader>,
     lines: LineSplit,
     config: &'a AppConfig,
+    margin: Vec<u8>,
     stats: ExecStats,
 }
 
@@ -248,6 +249,7 @@ impl<'a> HunkBuffer<'a> {
             line_number_info: None,
             lines: Default::default(),
             config,
+            margin: vec![0; MAX_MARGIN],
             stats: ExecStats::new(debug),
         }
     }
@@ -320,22 +322,29 @@ impl<'a> HunkBuffer<'a> {
             line_number_info,
             lines,
             config,
+            margin,
             stats,
         } = self;
-        let mut margin = [0u8; MAX_MARGIN];
         let (mut current_line_minus, mut current_line_plus, margin, half_margin) =
             match line_number_info {
                 Some(lni) => {
-                    let mut margin = &mut margin[..lni.width()];
-                    let half_margin = margin.len() / 2;
+                    let full_margin = lni.width();
+                    let half_margin = full_margin / 2;
 
-                    // If line number is 0, the column is empty and shouldn't be
-                    // printed
-                    if lni.minus_range.0 == 0 || lni.plus_range.0 == 0 {
-                        margin = &mut margin[..half_margin];
-                    }
-
-                    (lni.minus_range.0, lni.plus_range.0, margin, half_margin)
+                    // If line number is 0, the column is empty and
+                    // shouldn't be printed
+                    let margin_size = if lni.minus_range.0 == 0 || lni.plus_range.0 == 0 {
+                        half_margin
+                    } else {
+                        full_margin
+                    };
+                    assert!(margin.len() >= margin_size);
+                    (
+                        lni.minus_range.0,
+                        lni.plus_range.0,
+                        &mut margin[..margin_size],
+                        half_margin,
+                    )
                 }
                 None => Default::default(),
             };
