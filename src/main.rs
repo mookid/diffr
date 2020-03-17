@@ -493,7 +493,7 @@ where
         return Ok(());
     }
     let buf = &buf[from..to];
-    let ends_with_newline = buf.last().cloned() == Some(b'\n');
+    let ends_with_newline = buf.last() == Some(&b'\n');
     let buf = if ends_with_newline {
         &buf[..buf.len() - 1]
     } else {
@@ -532,7 +532,7 @@ fn skip_all_escape_code(buf: &[u8]) -> usize {
 /// code bytes.
 fn first_after_escape(buf: &[u8]) -> Option<u8> {
     let nbytes = skip_all_escape_code(&buf);
-    buf.iter().skip(nbytes).cloned().next()
+    buf.iter().skip(nbytes).copied().next()
 }
 
 /// Scan the slice looking for the given byte, returning the index of

@@ -291,7 +291,7 @@ impl LineSplit {
     }
 
     pub fn append_line(&mut self, line: &[u8]) {
-        if self.data.last().cloned() == Some(b'\n') {
+        if self.data.last() == Some(&b'\n') {
             self.line_lengths.push(line.len());
         } else {
             match self.line_lengths.last_mut() {
