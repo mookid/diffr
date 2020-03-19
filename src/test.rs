@@ -63,12 +63,12 @@ fn parse_line_number_test() {
 #[test]
 fn test_width() {
     for (i, x) in WIDTH.iter().enumerate() {
-        if x < &usize::max_value() {
+        if x < &u64::max_value() {
             assert_eq!(format!("{}", x + 1).len(), i + 1);
         }
     }
     assert_eq!(0, width1(0));
-    fn test(x: usize) {
+    fn test(x: u64) {
         assert_eq!(format!("{}", x).len(), width1(x));
     }
     for i in 1..=10000 {
@@ -80,7 +80,7 @@ fn test_width() {
     for i in 0..64 {
         test(1 << i);
     }
-    test(usize::max_value());
+    test(u64::max_value());
 
     assert_eq!("123:456".len(), HunkHeader::new((123, 5), (456, 9)).width());
     assert_eq!(
@@ -88,5 +88,5 @@ fn test_width() {
         HunkHeader::new((123, 999), (456, 9)).width()
     );
     assert_eq!("   :456".len(), HunkHeader::new((0, 0), (456, 9)).width());
-    assert_eq!(MAX_MARGIN, 2 * width1(usize::max_value()) + 1);
+    assert_eq!(MAX_MARGIN, 2 * width1(u64::max_value()) + 1);
 }
