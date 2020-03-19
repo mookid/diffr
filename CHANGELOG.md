@@ -1,3 +1,9 @@
+## 0.1.3 (2020/03/19)
+- diffr: add --line-numbers flag to display the line numbers
+  (Github #44, Athir Saleem).
+
+- diffr: --colors: allow to display italic faces (Github #45).
+
 ## 0.1.3 (2019/12/07)
 - diffr-lib: optimize_partition: new function.
   Postprocessing of the results of the LCS algorithm to reduce the

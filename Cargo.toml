@@ -1,6 +1,6 @@
 [package]
 name = "diffr"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Nathan Moreau <nathan.moreau@m4x.org>"]
 description = """
 An LCS based diff highlighting tool to ease code review from your terminal.
