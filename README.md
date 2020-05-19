@@ -6,14 +6,14 @@ Reviewing changes involves reading diffs.  Sometimes, a line-oriented
 presentation of changes is not precise enough, especially when changes
 involve long lines or very similar consecutive lines.
 
-This program processes such diffs, and output them (in the console)
+This program processes such diffs, and outputs them (in the console)
 with additional diff information on top of the unified diff format,
 using text attributes.
 
 It works hunk by hunk, recomputing the diff on a word-by-word basis.
 
 The current implementation uses 
-[Myers longest common subsequence](http://www.xmailserver.org/diff2.pdf) 
+[Myers' longest common subsequence](http://www.xmailserver.org/diff2.pdf) 
 algorithm.
 
 [![crates.io](https://img.shields.io/crates/v/diffr.svg)](https://crates.io/crates/diffr)
@@ -38,7 +38,13 @@ cd diffr
 makepkg -si
 ```
 
-#### From Source
+#### Homebrew
+
+```
+brew install diffr
+```
+
+#### From source
 
 You will need the [Rust compiler installed](https://www.rust-lang.org/tools/install).
 
@@ -48,7 +54,7 @@ To install the latest published version:
 cargo install diffr
 ```
 
-Alternatively, you can build the latest version:
+Alternatively, you can build the development version:
 
 ```
 git clone https://github.com/mookid/diffr.git
@@ -58,16 +64,17 @@ cargo install --path .
 
 ### How to use it?
 
-diffr tries to be a well behaved unix program: it reads its input from stdin
+diffr tries to be a well behaved Unix program: it reads its input from stdin
 and writes to stdout.
 
-#### To test it:
+#### One-off usage
+
 ```
 cargo build --release
 git show HEAD | path/to/diffr
 ```
 
-#### To integrate it with git:
+#### Integration with git
 
 Add the following section to your `.gitconfig` file:
 
@@ -81,6 +88,7 @@ Add the following section to your `.gitconfig` file:
 ```
 
 #### Display customization
+
 Use the --colors flag.
 
 You can customize the display of diffing and common segments of added
@@ -91,9 +99,11 @@ For example,
 ```
 diffr --colors refine-removed:background:200,0,0:foreground:white:bold
 ```
+
 tweaks the red used for uniquely removed text;
 
 The configuration used in the first screenshot is
+
 ```
 diffr --colors refine-added:none:background:0x33,0x99,0x33:bold --colors added:none:background:0x33,0x55,0x33 --colors refine-removed:none:background:0x99,0x33,0x33:bold --colors removed:none:background:0x55,0x33,0x33
 ```
