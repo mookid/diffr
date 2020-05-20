@@ -1,7 +1,5 @@
 ## diffr
 
-### Overview
-
 Reviewing changes involves reading diffs.  Sometimes, a line-oriented
 presentation of changes is not precise enough, especially when changes
 involve long lines or very similar consecutive lines.
@@ -19,8 +17,6 @@ algorithm.
 [![crates.io](https://img.shields.io/crates/v/diffr.svg)](https://crates.io/crates/diffr)
 [![crates.io](https://img.shields.io/crates/d/diffr.svg)](https://crates.io/crates/diffr)
 [![Build Status](https://dev.azure.com/nathanmoreau/diffr/_apis/build/status/mookid.diffr?branchName=master)](https://dev.azure.com/nathanmoreau/diffr/_build/latest?definitionId=4&branchName=master)
-
-### Screenshots
 
 ![Demo](screenshots/example_simple_mac.png)
 ![Demo](screenshots/example_nonconsecutive.png)
@@ -87,7 +83,7 @@ Add the following section to your `.gitconfig` file:
     diffFilter = path/to/diffr
 ```
 
-#### Display customization
+#### Color customization
 
 Use the --colors flag.
 
@@ -107,6 +103,10 @@ The configuration used in the first screenshot is
 ```
 diffr --colors refine-added:none:background:0x33,0x99,0x33:bold --colors added:none:background:0x33,0x55,0x33 --colors refine-removed:none:background:0x99,0x33,0x33:bold --colors removed:none:background:0x55,0x33,0x33
 ```
+
+#### Display line numbers
+
+The ` --line-numbers` displays the line numbers of the hunk.
 
 ### Related projects
 
