@@ -232,7 +232,26 @@ impl<'a> HunkBuffer<'a> {
         while y < data_hi && data[y].is_ascii_whitespace() {
             y += 1
         }
-        output(data, data_lo, y, &no_highlight, out)?;
+        let mut pending = (data_lo, y, false);
+        let mut trailing_ws = ColorSpec::new();
+        trailing_ws.set_bg(Some(Color::Red));
+        let color = |h| if h { &highlight } else { &no_highlight };
+        let mut output1 = |lo, hi, highlighted| -> std::io::Result<()> {
+            if lo == hi {
+                return Ok(());
+            }
+            let (lo1, hi1, highlighted1) = pending;
+            let color = if &data[lo..hi] == b"\n"
+                && data[lo1..hi1].iter().all(|b| b.is_ascii_whitespace())
+            {
+                &trailing_ws
+            } else {
+                color(highlighted1)
+            };
+            output(data, lo1, hi1, color, out)?;
+            pending = (lo, hi, highlighted);
+            Ok(())
+        };
         while let Some((lo, hi)) = shared.peek() {
             if data_hi <= y {
                 break;
@@ -247,8 +266,8 @@ impl<'a> HunkBuffer<'a> {
             if hi < lo {
                 continue;
             }
-            output(data, y, lo, &highlight, out)?;
-            output(data, lo, hi, &no_highlight, out)?;
+            output1(y, lo, true)?;
+            output1(lo, hi, false)?;
             y = hi;
             if last_iter {
                 break;
@@ -256,7 +275,9 @@ impl<'a> HunkBuffer<'a> {
                 shared.next();
             }
         }
-        output(data, y, data_hi, &highlight, out)?;
+        output1(y, data_hi, true)?;
+        let (lo1, hi1, highlighted1) = pending;
+        output(data, lo1, hi1, color(highlighted1), out)?;
         Ok(())
     }
 
