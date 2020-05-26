@@ -66,7 +66,6 @@ and writes to stdout.
 #### One-off usage
 
 ```
-cargo build --release
 git show HEAD | path/to/diffr
 ```
 
