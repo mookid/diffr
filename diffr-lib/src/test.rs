@@ -480,10 +480,10 @@ fn test_lcs_random() {
         let mut diff_lcs = vec![];
         for Snake { x0, y0, len, .. } in dst {
             let part_seq_a = (x0..x0 + len)
-                .flat_map(|idx| input.removed.nth_token(idx).data.iter().copied())
+                .flat_map(|idx| input.removed.nth_token(idx).data.iter().cloned())
                 .collect::<Vec<_>>();
             let part_seq_b = (y0..y0 + len)
-                .flat_map(|idx| input.added.nth_token(idx).data.iter().copied())
+                .flat_map(|idx| input.added.nth_token(idx).data.iter().cloned())
                 .collect::<Vec<_>>();
             assert_eq!(&*part_seq_a, &*part_seq_b);
             diff_lcs.extend_from_slice(&*part_seq_a);
@@ -647,7 +647,7 @@ fn test_optimize_alternatives(
     let seq = &Tokenization::new(&seq, &toks_seq);
     let lcs = &Tokenization::new(&lcs, &toks_lcs);
     let opt_result = optimize_partition(seq, lcs);
-    let mut it = opt_result.path.iter().copied();
+    let mut it = opt_result.path.iter().cloned();
     let mut prev = match it.next() {
         None => {
             assert!(alternatives.iter().any(|e| e.expected.is_empty()));
