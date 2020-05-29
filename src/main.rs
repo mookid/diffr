@@ -252,6 +252,13 @@ impl<'a> HunkBuffer<'a> {
             pending = (lo, hi, highlighted);
             Ok(())
         };
+        // special case: all whitespaces
+        if y == data_hi {
+            output(data, data_lo, data_lo + 1, &no_highlight, out)?;
+            output(data, data_lo + 1, data_hi, &trailing_ws, out)?;
+            return Ok(());
+        }
+
         while let Some((lo, hi)) = shared.peek() {
             if data_hi <= y {
                 break;
