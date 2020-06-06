@@ -187,6 +187,7 @@ struct HunkBuffer<'a> {
     lines: LineSplit,
     config: &'a AppConfig,
     margin: Vec<u8>,
+    warning_lines: Vec<usize>,
     stats: ExecStats,
 }
 
@@ -214,6 +215,7 @@ impl<'a> HunkBuffer<'a> {
             lines: Default::default(),
             config,
             margin: vec![0; MAX_MARGIN],
+            warning_lines: vec![],
             stats: ExecStats::new(debug),
         }
     }
@@ -315,6 +317,7 @@ impl<'a> HunkBuffer<'a> {
             lines,
             config,
             margin,
+            warning_lines,
             stats,
         } = self;
         let (mut current_line_minus, mut current_line_plus, margin, half_margin) =
@@ -357,8 +360,18 @@ impl<'a> HunkBuffer<'a> {
         stats.time_opt_lcs_ms += duration_ms_since(&start);
         let mut shared_added = normalized_lcs_added.shared_segments(&added).peekable();
         let mut shared_removed = normalized_lcs_removed.shared_segments(&removed).peekable();
+        let mut warnings = warning_lines.iter().peekable();
+        let defaultspec = ColorSpec::default();
 
-        for (line_start, line_end) in lines.iter() {
+        for (i, (line_start, line_end)) in lines.iter().enumerate() {
+            if let Some(&&nline) = warnings.peek() {
+                if nline == i {
+                    let w = &lines.data()[line_start..line_end];
+                    output(w, 0, w.len(), &defaultspec, out)?;
+                    warnings.next();
+                    continue;
+                }
+            }
             let first = data[line_start];
             match first {
                 b'-' | b'+' => {
@@ -417,13 +430,15 @@ impl<'a> HunkBuffer<'a> {
                     }
                     current_line_minus += 1;
                     current_line_plus += 1;
-                    output(data, line_start, line_end, &ColorSpec::default(), out)?
+                    output(data, line_start, line_end, &defaultspec, out)?
                 }
             }
         }
+        assert!(warnings.peek() == None);
         lines.clear();
         added_tokens.clear();
         removed_tokens.clear();
+        warning_lines.clear();
         Ok(())
     }
 
@@ -460,6 +475,7 @@ impl<'a> HunkBuffer<'a> {
         let mut stdin = stdin.lock();
         let mut stdout = stdout.lock();
         let mut in_hunk = false;
+        let mut hunk_line_number = 0;
 
         // process hunks
         loop {
@@ -468,13 +484,21 @@ impl<'a> HunkBuffer<'a> {
                 break;
             }
 
+            if in_hunk {
+                hunk_line_number += 1;
+            }
             match (in_hunk, first_after_escape(&buffer)) {
                 (true, Some(b'+')) => self.push_added(&buffer),
                 (true, Some(b'-')) => self.push_removed(&buffer),
                 (true, Some(b' ')) => add_raw_line(&mut self.lines, &buffer),
+                (true, Some(b'\\')) => {
+                    add_raw_line(&mut self.lines, &buffer);
+                    self.warning_lines.push(hunk_line_number - 1);
+                }
                 (_, other) => {
                     if in_hunk {
                         self.process_with_stats(&mut stdout)?;
+                        hunk_line_number = 0;
                     }
                     in_hunk = other == Some(b'@');
                     if self.config.line_numbers && in_hunk {
