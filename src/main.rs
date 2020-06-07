@@ -11,7 +11,11 @@ use termcolor::{
 };
 
 use diffr_lib::optimize_partition;
-use diffr_lib::{DiffInput, HashedSpan, LineSplit, Snake, Tokenization};
+use diffr_lib::DiffInput;
+use diffr_lib::LineSplit;
+use diffr_lib::Snake;
+use diffr_lib::TokenMap;
+use diffr_lib::Tokenization;
 
 mod cli_args;
 
@@ -177,8 +181,8 @@ impl ExecStats {
 struct HunkBuffer<'a> {
     v: Vec<isize>,
     diff_buffer: Vec<Snake>,
-    added_tokens: Vec<HashedSpan>,
-    removed_tokens: Vec<HashedSpan>,
+    added_tokens: Vec<(usize, usize)>,
+    removed_tokens: Vec<(usize, usize)>,
     line_number_info: Option<HunkHeader>,
     lines: LineSplit,
     config: &'a AppConfig,
@@ -186,7 +190,7 @@ struct HunkBuffer<'a> {
     stats: ExecStats,
 }
 
-fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<HashedSpan> {
+fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<(usize, usize)> {
     let mut shared_spans = vec![];
     for snake in diff_buffer.iter() {
         for i in 0..snake.len {
@@ -337,26 +341,22 @@ impl<'a> HunkBuffer<'a> {
                 None => Default::default(),
             };
         let data = lines.data();
-        let tokens = DiffInput {
-            removed: Tokenization::new(data, removed_tokens),
-            added: Tokenization::new(data, added_tokens),
-        };
+        let m = TokenMap::new(&mut [(removed_tokens.iter(), data), (added_tokens.iter(), data)]);
+        let removed = Tokenization::new(data, removed_tokens, &m);
+        let added = Tokenization::new(data, added_tokens, &m);
+        let tokens = DiffInput::new(&added, &removed);
         let start = now(stats.do_timings());
         diffr_lib::diff(&tokens, v, diff_buffer);
         // TODO output the lcs directly out of `diff` instead
-        let shared_spans = shared_spans(&tokens.added, &diff_buffer);
-        let lcs = &Tokenization::new(tokens.added.data(), &shared_spans);
+        let shared_spans = shared_spans(&added, &diff_buffer);
+        let lcs = Tokenization::new(data, &shared_spans, &m);
         stats.time_lcs_ms += duration_ms_since(&start);
         let start = now(stats.do_timings());
-        let normalized_lcs_added = optimize_partition(&tokens.added, lcs);
-        let normalized_lcs_removed = optimize_partition(&tokens.removed, lcs);
+        let normalized_lcs_added = optimize_partition(&added, &lcs);
+        let normalized_lcs_removed = optimize_partition(&removed, &lcs);
         stats.time_opt_lcs_ms += duration_ms_since(&start);
-        let mut shared_added = normalized_lcs_added
-            .shared_segments(&tokens.added)
-            .peekable();
-        let mut shared_removed = normalized_lcs_removed
-            .shared_segments(&tokens.removed)
-            .peekable();
+        let mut shared_added = normalized_lcs_added.shared_segments(&added).peekable();
+        let mut shared_removed = normalized_lcs_removed.shared_segments(&removed).peekable();
 
         for (line_start, line_end) in lines.iter() {
             let first = data[line_start];
@@ -367,14 +367,14 @@ impl<'a> HunkBuffer<'a> {
                         (
                             &config.added_face,
                             &config.refine_added_face,
-                            &tokens.added,
+                            tokens.added(),
                             &mut shared_added,
                         )
                     } else {
                         (
                             &config.removed_face,
                             &config.refine_removed_face,
-                            &tokens.removed,
+                            tokens.removed(),
                             &mut shared_removed,
                         )
                     };

@@ -1,6 +1,12 @@
 use super::*;
 use DiffKind::*;
 
+impl<'a> TokenizationRange<'a> {
+    fn nth_span(&self, n: isize) -> Span {
+        self.t.spans[to_usize(self.start_index + n)]
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiffKind {
     Keep,
@@ -24,6 +30,11 @@ where
     It: Iterator<Item = T>,
 {
     it.collect()
+}
+
+fn nth_token<'a>(input: &'a TokenizationRange, idx: isize) -> &'a [u8] {
+    let span = input.nth_span(idx);
+    &input.t.data()[span.0..span.1]
 }
 
 fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> {
@@ -51,19 +62,15 @@ fn compress_path(values: &Vec<(Vec<u8>, DiffKind)>) -> Vec<(Vec<u8>, DiffKind)> 
     result
 }
 
-fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSpan> {
+fn dummy_tokenize<'a>(data: &'a [u8]) -> Vec<Span> {
     let mut toks = vec![];
     for i in 0..data.len() {
-        toks.push(HashedSpan {
-            lo: i,
-            hi: i + 1,
-            hash: hash_slice(&data[i..i + 1]),
-        });
+        toks.push((i, i + 1));
     }
     toks
 }
 
-fn really_tokenize<'a>(data: &'a [u8]) -> Vec<HashedSpan> {
+fn really_tokenize<'a>(data: &'a [u8]) -> Vec<Span> {
     let mut toks = vec![];
     tokenize(data, 0, &mut toks);
     toks
@@ -77,24 +84,19 @@ fn diff_sequences_test_tokenized(expected: &[(&[u8], DiffKind)], seq_a: &[u8], s
     diff_sequences_test_aux(expected, seq_a, seq_b, really_tokenize)
 }
 
-fn diff_sequences_test_aux<Tok>(
+fn diff_sequences_test_aux(
     expected: &[(&[u8], DiffKind)],
     seq_a: &[u8],
     seq_b: &[u8],
-    tok: Tok,
-) where
-    Tok: Fn(&[u8]) -> Vec<HashedSpan>,
-{
+    tok: impl Fn(&[u8]) -> Vec<Span>,
+) {
     let toks_a = tok(&seq_a);
     let toks_b = tok(&seq_b);
-    let input = DiffInput {
-        added: Tokenization::new(&seq_b, &toks_b),
-        removed: Tokenization::new(&seq_a, &toks_a),
-    };
-    let input_r = DiffInput {
-        added: Tokenization::new(&seq_a, &toks_a),
-        removed: Tokenization::new(&seq_b, &toks_b),
-    };
+    let m = TokenMap::new(&mut [(toks_a.iter(), &seq_a), (toks_b.iter(), &seq_b)]);
+    let tok_a = Tokenization::new(seq_a, &toks_a, &m);
+    let tok_b = Tokenization::new(seq_b, &toks_b, &m);
+    let input = DiffInput::new(&tok_b, &tok_a);
+    let input_r = DiffInput::new(&tok_a, &tok_b);
 
     let mut v = vec![];
     let result = diff_sequences_simple_forward(&input, &mut v);
@@ -141,24 +143,24 @@ fn diff_sequences_test_aux<Tok>(
 
         if x0 != x {
             assert!(x0 < x);
-            let lo = input.removed.nth_span(x0).lo;
-            let hi = input.removed.nth_span(x - 1).hi;
-            script.push((input.removed.data[lo..hi].to_vec(), Removed));
+            let lo = input.removed.nth_span(x0).0;
+            let hi = input.removed.nth_span(x - 1).1;
+            script.push((input.removed.t.data[lo..hi].to_vec(), Removed));
         }
         if y0 != y {
             assert!(y0 < y);
-            let lo = input.added.nth_span(y0).lo;
-            let hi = input.added.nth_span(y - 1).hi;
-            script.push((input.added.data[lo..hi].to_vec(), Added));
+            let lo = input.added.nth_span(y0).0;
+            let hi = input.added.nth_span(y - 1).1;
+            script.push((input.added.t.data[lo..hi].to_vec(), Added));
         }
 
         let mut added = vec![];
         let mut removed = vec![];
         for i in 0..len {
             let r = input.removed.nth_span(x + i);
-            removed.extend_from_slice(&input.removed.data[r.lo..r.hi]);
+            removed.extend_from_slice(&input.removed.t.data[r.0..r.1]);
             let r = input.added.nth_span(y + i);
-            added.extend_from_slice(&input.added.data[r.lo..r.hi]);
+            added.extend_from_slice(&input.added.t.data[r.0..r.1]);
         }
 
         assert_eq!(added, removed, "{:?}", snake);
@@ -172,13 +174,13 @@ fn diff_sequences_test_aux<Tok>(
     let x0 = to_usize(x0);
     if x0 != x {
         assert!(x0 < x);
-        script.push((input.removed.data[x0..x].to_vec(), Removed));
+        script.push((input.removed.t.data[x0..x].to_vec(), Removed));
     }
     let y = input.added.nb_tokens();
     let y0 = to_usize(y0);
     if y0 != y {
         assert!(y0 < y);
-        script.push((input.added.data[y0..y].to_vec(), Added));
+        script.push((input.added.t.data[y0..y].to_vec(), Added));
     }
 
     assert_eq!(
@@ -335,20 +337,20 @@ fn tokenize_test() {
         tokenize(buf, 0, &mut tokens);
         assert_eq!(
             buf.len(),
-            tokens.iter().map(|range| range.hi - range.lo).sum()
+            tokens.iter().map(|range| range.1 - range.0).sum()
         );
         for token in &tokens {
-            assert!(token.lo < token.hi)
+            assert!(token.0 < token.1)
         }
         assert_eq!(
             mk_vec(buf.iter()),
-            mk_vec(tokens.iter().flat_map(|range| &buf[range.lo..range.hi]))
+            mk_vec(tokens.iter().flat_map(|range| &buf[range.0..range.1]))
         );
 
         let foo = mk_vec(
             tokens
                 .iter()
-                .map(|range| &buf[range.lo..range.hi])
+                .map(|range| &buf[range.0..range.1])
                 .map(|buf| string_of_bytes(buf)),
         );
 
@@ -357,7 +359,7 @@ fn tokenize_test() {
         assert_eq!(&*expected, &*foo);
 
         // TODO
-        let tokens = tokens.iter().map(|hsr| (hsr.lo, hsr.hi));
+        let tokens = tokens.iter().map(|hsr| (hsr.0, hsr.1));
         assert_eq!(expected, &to_strings(&buf, tokens)[..]);
     }
     test(&[], b"");
@@ -378,10 +380,10 @@ fn find_splitting_point_test() {
     fn test(expected: isize, seq_a: &[u8], seq_b: &[u8]) {
         let toks_a = dummy_tokenize(&seq_a);
         let toks_b = dummy_tokenize(&seq_b);
-        let input = DiffInput {
-            added: Tokenization::new(&seq_b, &toks_b),
-            removed: Tokenization::new(&seq_a, &toks_a),
-        };
+        let m = TokenMap::new(&mut [(toks_a.iter(), &seq_a), (toks_b.iter(), &seq_b)]);
+        let tok_a = Tokenization::new(seq_a, &toks_a, &m);
+        let tok_b = Tokenization::new(seq_b, &toks_b, &m);
+        let input = DiffInput::new(&tok_b, &tok_a);
 
         assert_eq!(expected, find_splitting_point(&input).sp);
         for i in 0..expected {
@@ -468,10 +470,10 @@ fn test_lcs_random() {
     fn test_lcs(seq_a: &[u8], seq_b: &[u8]) {
         let toks_a = dummy_tokenize(&seq_a);
         let toks_b = dummy_tokenize(&seq_b);
-        let input = DiffInput {
-            added: Tokenization::new(&seq_b, &toks_b),
-            removed: Tokenization::new(&seq_a, &toks_a),
-        };
+        let m = TokenMap::new(&mut [(toks_a.iter(), &seq_a), (toks_b.iter(), &seq_b)]);
+        let tok_a = Tokenization::new(seq_a, &toks_a, &m);
+        let tok_b = Tokenization::new(seq_b, &toks_b, &m);
+        let input = DiffInput::new(&tok_a, &tok_b);
         let mut v = vec![];
         let mut dst = vec![];
         diff(&input, &mut v, &mut dst);
@@ -480,10 +482,10 @@ fn test_lcs_random() {
         let mut diff_lcs = vec![];
         for Snake { x0, y0, len, .. } in dst {
             let part_seq_a = (x0..x0 + len)
-                .flat_map(|idx| input.removed.nth_token(idx).data.iter().cloned())
+                .flat_map(|idx| nth_token(&input.removed, idx).iter().cloned())
                 .collect::<Vec<_>>();
             let part_seq_b = (y0..y0 + len)
-                .flat_map(|idx| input.added.nth_token(idx).data.iter().cloned())
+                .flat_map(|idx| nth_token(&input.added, idx).iter().cloned())
                 .collect::<Vec<_>>();
             assert_eq!(&*part_seq_a, &*part_seq_b);
             diff_lcs.extend_from_slice(&*part_seq_a);
@@ -644,9 +646,11 @@ fn test_optimize_alternatives(
 ) {
     let toks_seq = dummy_tokenize(&seq);
     let toks_lcs = dummy_tokenize(&lcs);
-    let seq = &Tokenization::new(&seq, &toks_seq);
-    let lcs = &Tokenization::new(&lcs, &toks_lcs);
-    let opt_result = optimize_partition(seq, lcs);
+    let m = TokenMap::new(&mut [(toks_seq.iter(), &seq), (toks_lcs.iter(), &lcs)]);
+    let seq = Tokenization::new(&seq, &toks_seq, &m);
+    let lcs = Tokenization::new(&lcs, &toks_lcs, &m);
+    let opt_result = optimize_partition(&seq, &lcs);
+    let seq = TokenizationRange::new(&seq);
     let mut it = opt_result.path.iter().cloned();
     let mut prev = match it.next() {
         None => {
@@ -659,7 +663,7 @@ fn test_optimize_alternatives(
     for i in it {
         let mut part = vec![];
         for j in prev..i {
-            part.extend_from_slice(seq.nth_token(j as isize).data);
+            part.extend_from_slice(&nth_token(&seq, j as isize));
         }
         partition.push(part);
         prev = i;
