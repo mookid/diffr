@@ -7,62 +7,67 @@
 //! The main entrypoint is `diff`, which allows to compute the longest
 //! common subsequence between two sequences of byte slices.
 
-use std::collections::hash_map::DefaultHasher;
+use std::collections::hash_map::Entry::*;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::fmt::{Error as FmtErr, Formatter};
-use std::hash::{Hash, Hasher};
 
-/// A span of bytes and a hash of the content it refers.
-#[derive(Clone, Copy, Debug)]
-pub struct HashedSpan {
-    pub lo: usize,
-    pub hi: usize,
-    pub hash: u64,
-}
+type Span = (usize, usize);
 
-/// A wrapper around a token, optimized for equality comparison.
-#[derive(PartialEq, Eq)]
-pub struct HashedSlice<'a> {
-    pub hash: u64,
-    pub data: &'a [u8],
-}
+type TokenId = u64;
 
-impl<'a> Debug for HashedSlice<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
-        let data_pp = String::from_utf8_lossy(self.data);
-        f.debug_tuple("HashedSlice").field(&data_pp).finish()
+pub struct TokenMap<'a>(HashMap<&'a [u8], TokenId>);
+
+impl<'a> TokenMap<'a> {
+    pub fn new(input: &mut [(impl Iterator<Item = &'a Span>, &'a [u8])]) -> Self {
+        let mut m = HashMap::new();
+        let mut counter = 0;
+        for (spans, data) in input.iter_mut() {
+            for span in spans {
+                let data = &data[span.0..span.1];
+                match m.entry(data) {
+                    Vacant(e) => {
+                        e.insert(counter);
+                        counter += 1
+                    }
+                    Occupied(_) => {}
+                }
+            }
+        }
+        TokenMap(m)
+    }
+
+    fn get(&self, slice: &'a [u8]) -> TokenId {
+        self.0.get(slice).unwrap().clone()
     }
 }
 
-impl<'a> Hash for HashedSlice<'a> {
-    fn hash<H: Hasher>(&self, h: &mut H) {
-        h.write_u64(self.hash)
-    }
-}
-
-/// A tokenized slice of bytes.
 pub struct Tokenization<'a> {
     data: &'a [u8],
-    tokens: &'a [HashedSpan],
+    spans: &'a [Span],
+    token_ids: Vec<TokenId>,
+}
+
+struct TokenizationRange<'a> {
+    t: &'a Tokenization<'a>,
     start_index: isize,
     one_past_end_index: isize,
 }
 
-impl<'a> Debug for Tokenization<'a> {
+impl<'a> Debug for TokenizationRange<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
         let Self {
-            data,
-            tokens,
+            t: Tokenization { data, spans, .. },
             start_index,
             one_past_end_index,
         } = self;
         let data_pp = String::from_utf8_lossy(data);
-        let tokens_pp = tokens[to_usize(*start_index)..to_usize(*one_past_end_index)]
+        let tokens_pp = spans[to_usize(*start_index)..to_usize(*one_past_end_index)]
             .iter()
-            .map(|sref| String::from_utf8_lossy(&data[sref.lo..sref.hi]))
+            .map(|sref| String::from_utf8_lossy(&data[sref.0..sref.1]))
             .collect::<Vec<_>>();
-        f.debug_struct("Tokenization")
+        f.debug_struct("TokenizationRange")
             .field("data", &data_pp)
             .field("tokens", &tokens_pp)
             .finish()
@@ -70,34 +75,63 @@ impl<'a> Debug for Tokenization<'a> {
 }
 
 impl<'a> Tokenization<'a> {
-    pub fn new(data: &'a [u8], tokens: &'a [HashedSpan]) -> Self {
+    pub fn new(data: &'a [u8], spans: &'a [Span], token_map: &TokenMap) -> Self {
+        let mut token_ids = Vec::with_capacity(spans.len());
+        for span in spans {
+            token_ids.push(token_map.get(&data[span.0..span.1]));
+        }
         Tokenization {
             data,
-            tokens,
-            start_index: 0,
-            one_past_end_index: to_isize(tokens.len()),
+            spans,
+            token_ids,
         }
     }
 
-    pub fn data(&self) -> &'a [u8] {
+    pub fn data(&self) -> &[u8] {
         self.data
+    }
+
+    pub fn nb_tokens(&self) -> usize {
+        self.spans.len()
+    }
+
+    pub fn nth_span(&self, n: isize) -> Span {
+        self.spans[to_usize(n)]
+    }
+
+    pub fn tokens(&self) -> &[TokenId] {
+        &self.token_ids
+    }
+
+    pub fn nth_token(&self, n: isize) -> TokenId {
+        self.token_ids[to_usize(n)]
+    }
+}
+
+impl<'a> TokenizationRange<'a> {
+    fn new(t: &'a Tokenization<'a>) -> Self {
+        TokenizationRange {
+            t,
+            start_index: 0,
+            one_past_end_index: to_isize(t.spans.len()),
+        }
     }
 
     /// Split `self` in two tokenizations:
     /// * the first one from the start to `lo`;
     /// * the second one from `hi` to the end.
-    pub fn split_at(&self, lo: isize, hi: isize) -> (Self, Self) {
+    fn split_at(&self, lo: isize, hi: isize) -> (Self, Self) {
         let start = self.start_index;
         let end = self.one_past_end_index;
         assert!(start <= lo);
         assert!(lo <= hi);
         assert!(hi <= end);
         (
-            Tokenization {
+            TokenizationRange {
                 one_past_end_index: lo,
                 ..*self
             },
-            Tokenization {
+            TokenizationRange {
                 start_index: hi,
                 ..*self
             },
@@ -105,33 +139,39 @@ impl<'a> Tokenization<'a> {
     }
 
     /// Get `self`'s number of tokens.
-    pub fn nb_tokens(&self) -> usize {
+    fn nb_tokens(&self) -> usize {
         to_usize(self.one_past_end_index - self.start_index)
     }
 
     /// Get `self`'s `n`th token.
-    pub fn nth_token(&self, n: isize) -> HashedSlice {
-        let HashedSpan { lo, hi, hash } = self.nth_span(n);
-        HashedSlice {
-            hash,
-            data: &self.data[lo..hi],
-        }
-    }
-
-    /// Get the span corresponding to `self`'s `n`th token.
-    pub fn nth_span(&self, n: isize) -> HashedSpan {
-        self.tokens[to_usize(self.start_index + n)]
+    fn nth_token(&self, n: isize) -> TokenId {
+        self.t.token_ids[to_usize(self.start_index + n)]
     }
 }
 
-/// A pair of [Tokenization]s to compare.
+/// A pair of [TokenizationRange]s to compare.
 #[derive(Debug)]
 pub struct DiffInput<'a> {
-    pub added: Tokenization<'a>,
-    pub removed: Tokenization<'a>,
+    added: TokenizationRange<'a>,
+    removed: TokenizationRange<'a>,
 }
 
 impl<'a> DiffInput<'a> {
+    pub fn new(added: &'a Tokenization<'a>, removed: &'a Tokenization<'a>) -> Self {
+        DiffInput {
+            added: TokenizationRange::new(added),
+            removed: TokenizationRange::new(removed),
+        }
+    }
+
+    pub fn added(&self) -> &Tokenization<'a> {
+        self.added.t
+    }
+
+    pub fn removed(&self) -> &Tokenization<'a> {
+        self.removed.t
+    }
+
     fn split_at(&self, (x0, y0): (isize, isize), (x1, y1): (isize, isize)) -> (Self, Self) {
         let (removed1, removed2) = self.removed.split_at(x0, x1);
         let (added1, added2) = self.added.split_at(y0, y1);
@@ -156,20 +196,13 @@ impl<'a> DiffInput<'a> {
         self.added.nb_tokens()
     }
 
-    fn seq_a(&self, index: isize) -> HashedSlice {
+    fn seq_a(&self, index: isize) -> TokenId {
         self.removed.nth_token(index)
     }
 
-    fn seq_b(&self, index: isize) -> HashedSlice {
+    fn seq_b(&self, index: isize) -> TokenId {
         self.added.nth_token(index)
     }
-}
-
-/// Hash the given bytes.
-fn hash_slice(data: &[u8]) -> u64 {
-    let mut s = DefaultHasher::new();
-    s.write(data);
-    s.finish()
 }
 
 struct DiffTraversal<'a> {
@@ -452,7 +485,7 @@ pub fn diff(input: &DiffInput, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
 
 fn diff_rec(input: &DiffInput, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
     let n = to_isize(input.n());
-    fn trivial_diff(tok: &Tokenization) -> bool {
+    fn trivial_diff(tok: &TokenizationRange) -> bool {
         tok.one_past_end_index <= tok.start_index
     }
 
@@ -552,14 +585,10 @@ enum TokenKind {
 }
 
 /// Tokenize data from `src` from the position `ofs` into `tokens`.
-pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<HashedSpan>) {
+pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<Span>) {
     let mut push = |lo: usize, hi: usize| {
         if lo < hi {
-            tokens.push(HashedSpan {
-                lo,
-                hi,
-                hash: hash_slice(&src[lo..hi]),
-            })
+            tokens.push((lo, hi))
         }
     };
     let mut lo = ofs;

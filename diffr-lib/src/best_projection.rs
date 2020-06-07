@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry::*;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use crate::HashedSlice;
+use crate::TokenId;
 use crate::Tokenization;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy, Hash)]
@@ -12,23 +12,23 @@ struct Coord {
 }
 
 #[derive(Debug)]
-struct Context<'a> {
-    seq_index: HashMap<HashedSlice<'a>, Vec<usize>>,
+struct Context {
+    seq_index: HashMap<TokenId, Vec<usize>>,
 }
 
-impl<'a> Context<'a> {
-    fn new(seq: &'a Tokenization<'a>, lcs: &'a Tokenization<'a>) -> Self {
+impl Context {
+    fn new<'a>(seq: &'a Tokenization<'a>, lcs: &'a Tokenization<'a>) -> Self {
         let mut seq_index = HashMap::new();
-        for i in 0..to_isize(lcs.nb_tokens()) {
-            match seq_index.entry(lcs.nth_token(i)) {
+        for v in lcs.tokens() {
+            match seq_index.entry(*v) {
                 Occupied(_) => (),
                 Vacant(e) => {
                     e.insert(vec![]);
                 }
             }
         }
-        for i in 0..seq.nb_tokens() {
-            match seq_index.entry(seq.nth_token(to_isize(i))) {
+        for (i, v) in seq.tokens().iter().enumerate() {
+            match seq_index.entry(*v) {
                 Occupied(e) => {
                     e.into_mut().push(i);
                 }
@@ -38,8 +38,8 @@ impl<'a> Context<'a> {
         Context { seq_index }
     }
 
-    fn get_indexes(&self, tok: &HashedSlice<'a>, min_value: usize) -> &[usize] {
-        match self.seq_index.get(tok) {
+    fn get_indexes(&self, tok: TokenId, min_value: usize) -> &[usize] {
+        match self.seq_index.get(&tok) {
             Some(values) => {
                 let min_idx = match values.binary_search(&min_value) {
                     Ok(i) | Err(i) => i,
@@ -69,14 +69,12 @@ impl NormalizationResult {
 fn snake_len(seq: &Tokenization, lcs: &Tokenization, start_lcs: usize, start_seq: usize) -> usize {
     let lcs_len = lcs.nb_tokens() - start_lcs;
     let seq_len = seq.nb_tokens() - start_seq;
-    let max_smake_len = lcs_len.min(seq_len);
+    let max_snake_len = lcs_len.min(seq_len);
     let mut snake_len = 0;
-    while snake_len < max_smake_len {
-        let lcs_tok = lcs.nth_token(to_isize(start_lcs + snake_len));
-        let seq_tok = seq.nth_token(to_isize(start_seq + snake_len));
-        if lcs_tok != seq_tok {
-            break;
-        }
+    let seq = &seq.tokens()[start_seq..start_seq + max_snake_len];
+    let lcs = &lcs.tokens()[start_lcs..start_lcs + max_snake_len];
+
+    while snake_len < max_snake_len && lcs[snake_len] == seq[snake_len] {
         snake_len += 1
     }
     snake_len
@@ -85,7 +83,7 @@ fn snake_len(seq: &Tokenization, lcs: &Tokenization, start_lcs: usize, start_seq
 /// Minimize the number of elements when partitioning `seq` according to `lcs`.
 /// `lcs` is a subsequence of `seq`.
 pub fn optimize_partition(seq: &Tokenization, lcs: &Tokenization) -> NormalizationResult {
-    let context = Context::new(seq, lcs);
+    let context = Context::new(&seq, &lcs);
     let root = Coord {
         next_lcs: 0,
         next_seq: 0,
@@ -114,12 +112,12 @@ pub fn optimize_partition(seq: &Tokenization, lcs: &Tokenization) -> Normalizati
             let lcs_len = lcs.nb_tokens() - start_lcs;
             let mut last_enqueued_snake_len = 0;
             for start_seq in
-                context.get_indexes(&lcs.nth_token(to_isize(coord.next_lcs)), coord.next_seq)
+                context.get_indexes(lcs.nth_token(to_isize(coord.next_lcs)), coord.next_seq)
             {
                 if start_seq + lcs_len > seq.nb_tokens() {
                     break;
                 }
-                let snake_len = 1 + snake_len(seq, lcs, start_lcs + 1, start_seq + 1);
+                let snake_len = 1 + snake_len(&seq, &lcs, start_lcs + 1, start_seq + 1);
                 let next_coord = Coord {
                     next_lcs: start_lcs + snake_len,
                     next_seq: start_seq + snake_len,
@@ -209,8 +207,8 @@ impl<'a> Iterator for SharedSegments<'a> {
         if self.index + 1 < self.normalization.len() {
             let prev = self.normalization[self.index];
             let curr = self.normalization[self.index + 1];
-            let from = self.seq.nth_span(prev).lo;
-            let to = self.seq.nth_span(curr - 1).hi;
+            let from = self.seq.nth_span(prev).0;
+            let to = self.seq.nth_span(curr - 1).1;
             self.index += 2;
             Some((from, to))
         } else {
