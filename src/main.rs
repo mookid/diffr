@@ -1,5 +1,3 @@
-use atty::{is, Stream};
-
 use std::fmt::{Debug, Display, Error as FmtErr, Formatter};
 use std::io::{self, BufRead, Write};
 use std::iter::Peekable;
@@ -43,23 +41,7 @@ impl Default for AppConfig {
 }
 
 fn main() {
-    let matches = cli_args::get_matches();
-    if is(Stream::Stdin) {
-        eprintln!("{}", matches.usage());
-        std::process::exit(-1)
-    }
-
-    let mut config = AppConfig::default();
-    config.debug = matches.is_present(cli_args::FLAG_DEBUG);
-    config.line_numbers = matches.is_present(cli_args::FLAG_LINE_NUMBERS);
-
-    if let Some(values) = matches.values_of(cli_args::FLAG_COLOR) {
-        if let Err(err) = cli_args::parse_color_args(&mut config, values) {
-            eprintln!("{}", err);
-            std::process::exit(-1)
-        }
-    }
-
+    let config = cli_args::parse_config();
     let mut hunk_buffer = HunkBuffer::new(&config);
     match hunk_buffer.run() {
         Ok(()) => (),
@@ -191,6 +173,71 @@ struct HunkBuffer<'a> {
     stats: ExecStats,
 }
 
+#[derive(Default)]
+struct Margin<'a> {
+    lino_minus: usize,
+    lino_plus: usize,
+    margin: &'a mut [u8],
+    half_margin: usize,
+}
+
+impl<'a> Margin<'a> {
+    fn new(header: &'a HunkHeader, margin: &'a mut [u8]) -> Self {
+        let full_margin = header.width();
+        let half_margin = full_margin / 2;
+
+        // If line number is 0, the column is empty and
+        // shouldn't be printed
+        let margin_size = if header.minus_range.0 == 0 || header.plus_range.0 == 0 {
+            half_margin
+        } else {
+            full_margin
+        };
+        assert!(margin.len() >= margin_size);
+        Margin {
+            lino_plus: header.plus_range.0,
+            lino_minus: header.minus_range.0,
+            margin: &mut margin[..margin_size],
+            half_margin,
+        }
+    }
+
+    fn write_margin_changed(
+        &mut self,
+        is_plus: bool,
+        color: &ColorSpec,
+        out: &mut impl WriteColor,
+    ) -> io::Result<()> {
+        let mut margin_buf = &mut self.margin[..];
+        if is_plus {
+            if self.lino_minus != 0 {
+                write!(margin_buf, "{:w$} ", ' ', w = self.half_margin)?;
+            }
+            write!(margin_buf, "{:w$}", self.lino_plus, w = self.half_margin)?;
+            self.lino_plus += 1;
+        } else {
+            write!(margin_buf, "{:w$}", self.lino_minus, w = self.half_margin)?;
+            if self.lino_plus != 0 {
+                write!(margin_buf, " {:w$}", ' ', w = self.half_margin)?;
+            }
+            self.lino_minus += 1;
+        };
+        output(self.margin, 0, self.margin.len(), color, out)
+    }
+
+    fn write_margin_context(&mut self, out: &mut impl WriteColor) -> io::Result<()> {
+        if self.lino_minus != self.lino_plus {
+            write!(out, "{:w$}", self.lino_minus, w = self.half_margin)?;
+        } else {
+            write!(out, "{:w$}", ' ', w = self.half_margin)?;
+        }
+        write!(out, " {:w$}", self.lino_plus, w = self.half_margin)?;
+        self.lino_minus += 1;
+        self.lino_plus += 1;
+        Ok(())
+    }
+}
+
 fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<(usize, usize)> {
     let mut shared_spans = vec![];
     for snake in diff_buffer.iter() {
@@ -320,29 +367,10 @@ impl<'a> HunkBuffer<'a> {
             warning_lines,
             stats,
         } = self;
-        let (mut current_line_minus, mut current_line_plus, margin, half_margin) =
-            match line_number_info {
-                Some(lni) => {
-                    let full_margin = lni.width();
-                    let half_margin = full_margin / 2;
-
-                    // If line number is 0, the column is empty and
-                    // shouldn't be printed
-                    let margin_size = if lni.minus_range.0 == 0 || lni.plus_range.0 == 0 {
-                        half_margin
-                    } else {
-                        full_margin
-                    };
-                    assert!(margin.len() >= margin_size);
-                    (
-                        lni.minus_range.0,
-                        lni.plus_range.0,
-                        &mut margin[..margin_size],
-                        half_margin,
-                    )
-                }
-                None => Default::default(),
-            };
+        let mut margin = match line_number_info {
+            Some(lni) => Margin::new(lni, margin),
+            None => Default::default(),
+        };
         let data = lines.data();
         let m = TokenMap::new(&mut [(removed_tokens.iter(), data), (added_tokens.iter(), data)]);
         let removed = Tokenization::new(data, removed_tokens, &m);
@@ -391,25 +419,9 @@ impl<'a> HunkBuffer<'a> {
                             &mut shared_removed,
                         )
                     };
-
                     if config.line_numbers {
-                        let mut margin_buf = &mut margin[..];
-                        if is_plus {
-                            if current_line_minus != 0 {
-                                write!(margin_buf, "{:w$} ", ' ', w = half_margin)?;
-                            }
-                            write!(margin_buf, "{:w$}", current_line_plus, w = half_margin)?;
-                            current_line_plus += 1;
-                        } else {
-                            write!(margin_buf, "{:w$}", current_line_minus, w = half_margin)?;
-                            if current_line_plus != 0 {
-                                write!(margin_buf, " {:w$}", ' ', w = half_margin)?;
-                            }
-                            current_line_minus += 1;
-                        };
-                        output(margin, 0, margin.len(), &nohighlight, out)?
+                        margin.write_margin_changed(is_plus, nohighlight, out)?
                     }
-
                     Self::paint_line(
                         toks.data(),
                         &(line_start, line_end),
@@ -421,15 +433,8 @@ impl<'a> HunkBuffer<'a> {
                 }
                 _ => {
                     if config.line_numbers {
-                        if current_line_minus != current_line_plus {
-                            write!(out, "{:w$}", current_line_minus, w = half_margin)?;
-                        } else {
-                            write!(out, "{:w$}", ' ', w = half_margin)?;
-                        }
-                        write!(out, " {:w$}", current_line_plus, w = half_margin)?;
+                        margin.write_margin_context(out)?
                     }
-                    current_line_minus += 1;
-                    current_line_plus += 1;
                     output(data, line_start, line_end, &defaultspec, out)?
                 }
             }
@@ -486,29 +491,32 @@ impl<'a> HunkBuffer<'a> {
                 break;
             }
 
+            let first = first_after_escape(&buffer);
             if in_hunk {
                 hunk_line_number += 1;
-            }
-            match (in_hunk, first_after_escape(&buffer)) {
-                (true, Some(b'+')) => self.push_added(&buffer),
-                (true, Some(b'-')) => self.push_removed(&buffer),
-                (true, Some(b' ')) => add_raw_line(&mut self.lines, &buffer),
-                (true, Some(b'\\')) => {
-                    add_raw_line(&mut self.lines, &buffer);
-                    self.warning_lines.push(hunk_line_number - 1);
-                }
-                (_, other) => {
-                    if in_hunk {
+                match first {
+                    Some(b'+') => self.push_added(&buffer),
+                    Some(b'-') => self.push_removed(&buffer),
+                    Some(b' ') => add_raw_line(&mut self.lines, &buffer),
+                    Some(b'\\') => {
+                        add_raw_line(&mut self.lines, &buffer);
+                        self.warning_lines.push(hunk_line_number - 1);
+                    }
+                    _ => {
                         self.process_with_stats(&mut stdout)?;
-                        hunk_line_number = 0;
+                        in_hunk = false;
                     }
-                    in_hunk = other == Some(b'@');
-                    if self.config.line_numbers && in_hunk {
-                        self.line_number_info = parse_line_number(&buffer);
-                    }
-                    output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
                 }
             }
+            if !in_hunk {
+                hunk_line_number = 0;
+                in_hunk = first == Some(b'@');
+                if self.config.line_numbers && in_hunk {
+                    self.line_number_info = parse_line_number(&buffer);
+                }
+                output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
+            }
+
             buffer.clear();
         }
 
