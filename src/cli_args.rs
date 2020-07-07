@@ -16,12 +16,12 @@ diffr reads from standard input and write to standard output.
     diff -u <file1> <file2> | diffr
     git show | diffr";
 
-pub const FLAG_DEBUG: &str = "--debug";
-pub const FLAG_COLOR: &str = "--colors";
-pub const FLAG_LINE_NUMBERS: &str = "--line-numbers";
+const FLAG_DEBUG: &str = "--debug";
+const FLAG_COLOR: &str = "--colors";
+const FLAG_LINE_NUMBERS: &str = "--line-numbers";
 
 #[derive(Debug, Clone, Copy)]
-pub enum FaceName {
+enum FaceName {
     Added,
     RefineAdded,
     Removed,
@@ -138,7 +138,7 @@ impl EnumString for AttributeName {
 }
 
 #[derive(Debug)]
-pub enum ArgParsingError {
+enum ArgParsingError {
     FaceName(String),
     AttributeName(String),
     Color(ParseColorError),
@@ -210,7 +210,7 @@ where
     Ok(())
 }
 
-pub fn parse_color_args<'a, Values>(
+fn parse_color_args<'a, Values>(
     config: &mut AppConfig,
     values: Values,
 ) -> Result<(), ArgParsingError>
@@ -227,7 +227,7 @@ where
     Ok(())
 }
 
-pub fn get_matches() -> ArgMatches<'static> {
+fn get_matches() -> ArgMatches<'static> {
     App::new("diffr")
         .setting(AppSettings::UnifiedHelpMessage)
         .version("0.1.4")
@@ -294,4 +294,24 @@ a blue background, written with a bold font.",
                 .help("Display line numbers."),
         )
         .get_matches()
+}
+
+pub fn parse_config() -> AppConfig {
+    let matches = get_matches();
+    if atty::is(atty::Stream::Stdin) {
+        eprintln!("{}", matches.usage());
+        std::process::exit(-1)
+    }
+
+    let mut config = AppConfig::default();
+    config.debug = matches.is_present(FLAG_DEBUG);
+    config.line_numbers = matches.is_present(FLAG_LINE_NUMBERS);
+
+    if let Some(values) = matches.values_of(FLAG_COLOR) {
+        if let Err(err) = parse_color_args(&mut config, values) {
+            eprintln!("{}", err);
+            std::process::exit(-1)
+        }
+    }
+    config
 }
