@@ -49,6 +49,21 @@ pub struct Tokenization<'a> {
     token_ids: Vec<TokenId>,
 }
 
+impl Debug for Tokenization<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtErr> {
+        let Self { data, spans, .. } = self;
+        let data_pp = String::from_utf8_lossy(data);
+        let tokens_pp = spans
+            .iter()
+            .map(|sref| String::from_utf8_lossy(&data[sref.0..sref.1]))
+            .collect::<Vec<_>>();
+        f.debug_struct("Tokenization")
+            .field("data", &data_pp)
+            .field("tokens", &tokens_pp)
+            .finish()
+    }
+}
+
 struct TokenizationRange<'a> {
     t: &'a Tokenization<'a>,
     start_index: isize,
