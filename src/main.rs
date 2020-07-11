@@ -440,6 +440,8 @@ impl<'a> HunkBuffer<'a> {
             }
         }
         assert!(warnings.peek() == None);
+        drop(shared_removed);
+        drop(shared_added);
         lines.clear();
         added_tokens.clear();
         removed_tokens.clear();

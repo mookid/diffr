@@ -546,8 +546,7 @@ fn split_lines_append_test() {
 fn check_split(input: &[u8], split: &LineSplit) {
     assert_eq!(
         input,
-        &*split.iter().fold(vec![], |acc, (lo, hi)| {
-            let mut acc = acc.clone();
+        &*split.iter().fold(vec![], |mut acc, (lo, hi)| {
             acc.extend_from_slice(&input[lo..hi]);
             acc
         })

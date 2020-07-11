@@ -61,7 +61,10 @@ pub struct NormalizationResult {
 impl NormalizationResult {
     /// The shared segments between both inputs of `optimize_partition`.
     /// The `seq` argument is the longest of the two inputs.
-    pub fn shared_segments<'a>(&'a self, seq: &'a Tokenization) -> SharedSegments<'a> {
+    pub fn shared_segments<'a>(
+        &'a self,
+        seq: &'a Tokenization,
+    ) -> impl Iterator<Item = (usize, usize)> + 'a {
         SharedSegments::new(self, seq)
     }
 }
@@ -181,7 +184,7 @@ fn to_isize(input: usize) -> isize {
 }
 
 /// The shared segments between both inputs of `optimize_partition`.
-pub struct SharedSegments<'a> {
+struct SharedSegments<'a> {
     index: usize,
     normalization: &'a Vec<isize>,
     seq: &'a Tokenization<'a>,

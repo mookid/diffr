@@ -164,7 +164,7 @@ impl<'a> TokenizationRange<'a> {
     }
 }
 
-/// A pair of [TokenizationRange]s to compare.
+/// A pair of `TokenizationRange`s to compare.
 #[derive(Debug)]
 pub struct DiffInput<'a> {
     added: TokenizationRange<'a>,
@@ -326,7 +326,7 @@ pub struct LineSplit {
 }
 
 impl LineSplit {
-    pub fn iter(&self) -> LineSplitIter {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (usize, usize)> + 'a {
         LineSplitIter {
             line_split: &self,
             index: 0,
@@ -360,7 +360,7 @@ impl LineSplit {
     }
 }
 
-pub struct LineSplitIter<'a> {
+struct LineSplitIter<'a> {
     line_split: &'a LineSplit,
     start_of_slice: usize,
     index: usize,
@@ -629,7 +629,7 @@ fn classify_byte(b: u8) -> TokenKind {
 
 mod best_projection;
 pub use crate::best_projection::optimize_partition;
-pub use crate::best_projection::{NormalizationResult, SharedSegments};
+pub use crate::best_projection::NormalizationResult;
 
 #[cfg(test)]
 mod test;
