@@ -391,20 +391,20 @@ impl<'a> HunkBuffer<'a> {
         let mut warnings = warning_lines.iter().peekable();
         let defaultspec = ColorSpec::default();
 
-        for (i, (line_start, line_end)) in lines.iter().enumerate() {
+        for (i, range) in lines.iter().enumerate() {
             if let Some(&&nline) = warnings.peek() {
                 if nline == i {
-                    let w = &lines.data()[line_start..line_end];
+                    let w = &lines.data()[range.0..range.1];
                     output(w, 0, w.len(), &defaultspec, out)?;
                     warnings.next();
                     continue;
                 }
             }
-            let first = data[line_start];
+            let first = data[range.0];
             match first {
                 b'-' | b'+' => {
                     let is_plus = first == b'+';
-                    let (nohighlight, highlight, toks, shared) = if is_plus {
+                    let (nhl, hl, toks, shared) = if is_plus {
                         (
                             &config.added_face,
                             &config.refine_added_face,
@@ -420,22 +420,15 @@ impl<'a> HunkBuffer<'a> {
                         )
                     };
                     if config.line_numbers {
-                        margin.write_margin_changed(is_plus, nohighlight, out)?
+                        margin.write_margin_changed(is_plus, nhl, out)?
                     }
-                    Self::paint_line(
-                        toks.data(),
-                        &(line_start, line_end),
-                        &nohighlight,
-                        &highlight,
-                        shared,
-                        out,
-                    )?;
+                    Self::paint_line(toks.data(), &range, nhl, hl, shared, out)?;
                 }
                 _ => {
                     if config.line_numbers {
                         margin.write_margin_context(out)?
                     }
-                    output(data, line_start, line_end, &defaultspec, out)?
+                    output(data, range.0, range.1, &defaultspec, out)?
                 }
             }
         }
