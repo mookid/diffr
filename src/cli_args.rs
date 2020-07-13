@@ -1,9 +1,20 @@
 use super::AppConfig;
-use clap::{App, AppSettings, Arg, ArgMatches};
+
+use clap::App;
+use clap::AppSettings;
+use clap::Arg;
+use clap::ArgMatches;
+
+use termcolor::Color;
+use termcolor::ColorSpec;
+use termcolor::ParseColorError;
+
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::fmt::{Error as FmtErr, Formatter};
+use std::process::Command;
+use std::process::Stdio;
 use std::str::FromStr;
-use termcolor::{Color, ColorSpec, ParseColorError};
 
 const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
@@ -19,6 +30,7 @@ diffr reads from standard input and write to standard output.
 const FLAG_DEBUG: &str = "--debug";
 const FLAG_COLOR: &str = "--colors";
 const FLAG_LINE_NUMBERS: &str = "--line-numbers";
+const FLAG_NO_GITCONFIG: &str = "--no-gitconfig";
 
 #[derive(Debug, Clone, Copy)]
 enum FaceName {
@@ -210,6 +222,15 @@ where
     Ok(())
 }
 
+fn parse_color_arg(config: &mut AppConfig, value: &str) -> Result<(), ArgParsingError> {
+    let mut pieces = value.split(':');
+    if let Some(piece) = pieces.next() {
+        let face_name = piece.parse::<FaceName>()?;
+        parse_color_attributes(config, pieces, face_name)?;
+    }
+    Ok(())
+}
+
 fn parse_color_args<'a, Values>(
     config: &mut AppConfig,
     values: Values,
@@ -218,23 +239,18 @@ where
     Values: Iterator<Item = &'a str>,
 {
     for value in values {
-        let mut pieces = value.split(':');
-        if let Some(piece) = pieces.next() {
-            let face_name = piece.parse::<FaceName>()?;
-            parse_color_attributes(config, pieces, face_name)?;
-        }
+        parse_color_arg(config, value)?;
     }
     Ok(())
 }
 
-fn get_matches() -> ArgMatches<'static> {
+fn app() -> App<'static, 'static> {
     App::new("diffr")
         .setting(AppSettings::UnifiedHelpMessage)
         .version("0.1.4")
         .author("Nathan Moreau <nathan.moreau@m4x.org>")
         .about(ABOUT)
         .usage(USAGE)
-        .arg(Arg::with_name(FLAG_DEBUG).long(FLAG_DEBUG).hidden(true))
         .arg(
             Arg::with_name(FLAG_COLOR)
                 .long(FLAG_COLOR)
@@ -291,27 +307,106 @@ a blue background, written with a bold font.",
         .arg(
             Arg::with_name(FLAG_LINE_NUMBERS)
                 .long(FLAG_LINE_NUMBERS)
+                .multiple(true)
                 .help("Display line numbers."),
         )
-        .get_matches()
+}
+
+fn app_cli() -> App<'static, 'static> {
+    app()
+        .arg(Arg::with_name(FLAG_DEBUG).long(FLAG_DEBUG).hidden(true))
+        .arg(
+            Arg::with_name(FLAG_NO_GITCONFIG)
+                .long(FLAG_NO_GITCONFIG)
+                .help("Ignore settings from the git configuration."),
+        )
+}
+
+fn die(message: impl Display) -> ! {
+    eprintln!("{}", message);
+    std::process::exit(-1);
+}
+
+fn parse_config_from_cli(config: &mut AppConfig, matches: &ArgMatches<'static>) {
+    if matches.is_present(FLAG_DEBUG) {
+        config.debug = true;
+    }
+    if matches.is_present(FLAG_LINE_NUMBERS) {
+        config.line_numbers = true;
+    }
+    if let Some(values) = matches.values_of(FLAG_COLOR) {
+        if let Err(err) = parse_color_args(config, values) {
+            die(&err);
+        }
+    }
+}
+
+fn remove_prefix<'a>(data: &'a [u8], prefix: &'a [u8]) -> Option<&'a [u8]> {
+    if data.starts_with(prefix) {
+        Some(&data[prefix.len()..])
+    } else {
+        None
+    }
+}
+
+fn parse_config_from_dotgitconfig(config: &mut AppConfig) {
+    // run `git config --list` from the same working directory
+    let mut cmd = Command::new("git");
+    cmd.stdout(Stdio::piped());
+    cmd.args(&["config", "--list", "--null"]);
+    let stdout = match cmd.spawn() {
+        Err(_) => {
+            die("could not spawn git process");
+        }
+        Ok(child) => match child.wait_with_output() {
+            Ok(output) => output.stdout,
+            Err(_) => die("error waiting for git process output"),
+        },
+    };
+
+    fn kvp<'a>(value: &'a [u8]) -> Result<(Cow<'a, str>, Cow<'a, str>), &str> {
+        let mut pieces = value.split(|b| b == &b'\n');
+        let key = pieces.next().ok_or("missing key")?;
+        let value = pieces.next().ok_or("missing value")?;
+        if pieces.next().is_some() {
+            Err("too many values")
+        } else {
+            Ok((String::from_utf8_lossy(key), String::from_utf8_lossy(value)))
+        }
+    }
+    let kvp = |value| match kvp(value) {
+        Err(err) => die(format!("invalid key-value pair: {}", err)),
+        Ok(res) => res,
+    };
+    let add_flag = |mut args: Vec<String>, (ref k, ref v)| {
+        if k == "line-numbers" {
+            args.push(format!("--line-numbers"));
+        } else {
+            // let clap emit an error message
+            args.push(format!("--{}", k));
+            args.push(format!("{}", v));
+        }
+        args
+    };
+    let args = stdout
+        .split(|b| b == &0)
+        .filter_map(|kvp| remove_prefix(kvp, b"diffr."))
+        .map(kvp)
+        .fold(vec!["diffr".to_string()], add_flag);
+    let matches = app().get_matches_from(&args);
+    parse_config_from_cli(config, &matches);
 }
 
 pub fn parse_config() -> AppConfig {
-    let matches = get_matches();
+    let matches = app_cli().get_matches();
     if atty::is(atty::Stream::Stdin) {
-        eprintln!("{}", matches.usage());
-        std::process::exit(-1)
+        die(matches.usage());
     }
 
     let mut config = AppConfig::default();
-    config.debug = matches.is_present(FLAG_DEBUG);
-    config.line_numbers = matches.is_present(FLAG_LINE_NUMBERS);
-
-    if let Some(values) = matches.values_of(FLAG_COLOR) {
-        if let Err(err) = parse_color_args(&mut config, values) {
-            eprintln!("{}", err);
-            std::process::exit(-1)
-        }
+    if !matches.is_present(FLAG_NO_GITCONFIG) {
+        parse_config_from_dotgitconfig(&mut config);
     }
+    parse_config_from_cli(&mut config, &matches);
     config
 }
