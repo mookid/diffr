@@ -456,14 +456,16 @@ impl<'a> HunkBuffer<'a> {
     }
 
     fn push_aux(&mut self, line: &[u8], added: bool) {
+        // XXX: skip leading token
         let mut ofs = self.lines.len() + 1;
         add_raw_line(&mut self.lines, line);
         // get back the line sanitized from escape codes:
         let line = &self.lines.data()[ofs..];
-        // XXX: skip leading token and leading spaces
-        while ofs < line.len() && line[ofs].is_ascii_whitespace() {
-            ofs += 1
-        }
+        // skip leading spaces
+        ofs += line
+            .iter()
+            .take_while(|ch| ch.is_ascii_whitespace())
+            .count();
         diffr_lib::tokenize(
             &self.lines.data(),
             ofs,
