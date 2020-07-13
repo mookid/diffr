@@ -61,7 +61,7 @@ fn diffr_path_default() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     dir.push("target");
     dir.push("debug");
-    dir.push("diffr");
+    dir.push(if cfg!(windows) { "diffr.exe" } else { "diffr" });
     dir
 }
 
