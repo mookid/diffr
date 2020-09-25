@@ -626,6 +626,7 @@ fn skip_token(buf: &[u8]) -> usize {
     }
 }
 
+// TODO: extend to the multiple range case
 #[derive(Default, PartialEq, Eq)]
 struct HunkHeader {
     // range are (ofs,len) for the interval [ofs, ofs + len)
@@ -783,13 +784,29 @@ impl<'a> LineNumberParser<'a> {
         Some((p0, p1))
     }
 
+    fn expect_multiple_minus_ranges(&mut self) -> Option<(usize, usize)> {
+        let next = |that: &mut Self| {
+            that.expect(b'-')?;
+            that.parse_pair()
+        };
+        let mut res = None;
+        for i in 0.. {
+            if i != 0 {
+                self.expect_multiple(|x| x.is_ascii_whitespace())?;
+            }
+            match next(self) {
+                next @ Some(_) => res = next,
+                None => break,
+            }
+        }
+        res
+    }
+
     fn parse_line_number(&mut self) -> Option<HunkHeader> {
         self.skip_whitespaces();
         self.expect_multiple(|x| x == b'@')?;
         self.expect_multiple(|x| x.is_ascii_whitespace())?;
-        self.expect(b'-')?;
-        let minus_range = self.parse_pair()?;
-        self.expect_multiple(|x| x.is_ascii_whitespace())?;
+        let minus_range = self.expect_multiple_minus_ranges()?;
         self.expect(b'+')?;
         let plus_range = self.parse_pair()?;
         self.expect_multiple(|x| x.is_ascii_whitespace())?;
