@@ -45,6 +45,8 @@ fn parse_line_number_test() {
     test_ok(0, 0, 1, 1, b"@@ -0,0 +1 @@");
     test_ok(0, 0, 1, 1, b"  @@ -0,0 +1 @@");
     test_ok(0, 0, 1, 1, b"@@   -0,0 +1 @@");
+    // last one wins
+    test_ok(0, 2, 0, 3, b"@@@ -0,0 -0,2 +0,3 @@@");
     test_fail(b"@@-0,0 +1 @@");
     test_fail(b"@@ -0,0+1 @@");
     test_fail(b"@@ -0,0 +1@@");
@@ -52,6 +54,7 @@ fn parse_line_number_test() {
     test_fail(b"-0,0 +1");
     test_fail(b"@@ 0,0 +1 @@");
     test_fail(b"@@ -0,0 1 @@");
+    test_fail(b"@@@ -0,0 +0,2 +0,3 @@@");
 
     // overflow
     test_fail(b"@@ -0,0 +19999999999999999999 @@");
