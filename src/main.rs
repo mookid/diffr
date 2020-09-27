@@ -20,6 +20,7 @@ mod cli_args;
 #[derive(Debug)]
 pub struct AppConfig {
     debug: bool,
+    html: bool,
     line_numbers: bool,
     added_face: ColorSpec,
     refine_added_face: ColorSpec,
@@ -31,12 +32,134 @@ impl Default for AppConfig {
     fn default() -> Self {
         AppConfig {
             debug: false,
+            html: false,
             line_numbers: false,
             added_face: color_spec(Some(Green), None, false),
             refine_added_face: color_spec(Some(White), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
             refine_removed_face: color_spec(Some(White), Some(Red), true),
         }
+    }
+}
+
+struct HtmlColorWriter<W> {
+    inner: W,
+    current_color: Option<ColorSpec>,
+}
+
+impl<W> HtmlColorWriter<W> {
+    fn new(inner: W) -> Self {
+        HtmlColorWriter {
+            inner,
+            current_color: None,
+        }
+    }
+}
+
+fn write_color<W>(w: &mut W, color: &Color) -> std::io::Result<()>
+where
+    W: Write,
+{
+    use Color::*;
+    match color {
+        Black => {
+            w.write(b"black")?;
+        }
+        Blue => {
+            w.write(b"blue")?;
+        }
+        Green => {
+            w.write(b"green")?;
+        }
+        Red => {
+            w.write(b"red")?;
+        }
+        Cyan => {
+            w.write(b"cyan")?;
+        }
+        Magenta => {
+            w.write(b"magenta")?;
+        }
+        Yellow => {
+            w.write(b"yellow")?;
+        }
+        White => {
+            w.write(b"white")?;
+        }
+        Rgb(r, g, b) => {
+            write!(w, "#{:x}{:x}{:x}", r, g, b)?;
+        }
+        _ => panic!("not implemented"),
+    }
+    Ok(())
+}
+
+impl<W> WriteColor for HtmlColorWriter<W>
+where
+    W: Write,
+{
+    fn supports_color(&self) -> bool {
+        true
+    }
+
+    fn set_color(&mut self, spec: &ColorSpec) -> std::io::Result<()> {
+        if spec.is_none() {
+            self.current_color = None;
+        } else {
+            let w = &mut self.inner;
+            w.write(b"<span style=\"")?;
+            if let Some(fg) = spec.fg() {
+                w.write(b"color:")?;
+                write_color(w, fg)?;
+                w.write(b";")?;
+            }
+            if let Some(bg) = spec.bg() {
+                w.write(b"background:")?;
+                write_color(w, bg)?;
+                w.write(b";")?;
+            }
+            w.write(b"\">")?;
+            self.current_color = Some(spec.clone());
+        }
+        Ok(())
+    }
+
+    fn reset(&mut self) -> std::io::Result<()> {
+        if self.current_color.is_some() {
+            self.inner.write(b"</span>")?;
+            self.current_color = None;
+        }
+        Ok(())
+    }
+}
+
+impl<W> Write for HtmlColorWriter<W>
+where
+    W: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let w = &mut self.inner;
+        let n = buf.len();
+        let table: [(u8, &[u8]); 5] = [
+            (b'<', b"&lt;"),
+            (b'>', b"&gt;"),
+            (b'"', b"&quot;"),
+            (b'\'', b"&apos;"),
+            (b'&', b"&amp;"),
+        ];
+        for b in buf {
+            if let Some((_, escaped)) = table.iter().find(|p| p.0 == *b) {
+                w.write(escaped)?;
+            } else {
+                w.write(&[*b])?;
+            }
+        }
+        w.flush()?;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -478,6 +601,12 @@ impl<'a> HunkBuffer<'a> {
         let mut buffer = vec![];
         let mut stdin = stdin.lock();
         let mut stdout = stdout.lock();
+        let mut stdout: Box<dyn WriteColor> = if self.config.html {
+            write!(stdout, "<pre>")?;
+            Box::new(HtmlColorWriter::new(stdout))
+        } else {
+            Box::new(stdout)
+        };
         let mut in_hunk = false;
         let mut hunk_line_number = 0;
 

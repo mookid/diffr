@@ -17,6 +17,7 @@ diffr reads from standard input and write to standard output.
     git show | diffr";
 
 const FLAG_DEBUG: &str = "--debug";
+const FLAG_HTML: &str = "--html";
 const FLAG_COLOR: &str = "--colors";
 const FLAG_LINE_NUMBERS: &str = "--line-numbers";
 
@@ -235,6 +236,7 @@ fn get_matches() -> ArgMatches<'static> {
         .about(ABOUT)
         .usage(USAGE)
         .arg(Arg::with_name(FLAG_DEBUG).long(FLAG_DEBUG).hidden(true))
+        .arg(Arg::with_name(FLAG_HTML).long(FLAG_HTML).hidden(true))
         .arg(
             Arg::with_name(FLAG_COLOR)
                 .long(FLAG_COLOR)
@@ -305,6 +307,7 @@ pub fn parse_config() -> AppConfig {
 
     let mut config = AppConfig::default();
     config.debug = matches.is_present(FLAG_DEBUG);
+    config.html = matches.is_present(FLAG_HTML);
     config.line_numbers = matches.is_present(FLAG_LINE_NUMBERS);
 
     if let Some(values) = matches.values_of(FLAG_COLOR) {
