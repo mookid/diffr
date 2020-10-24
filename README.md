@@ -66,7 +66,7 @@ and writes to stdout.
 #### One-off usage
 
 ```
-git show HEAD | path/to/diffr
+git show HEAD | diffr
 ```
 
 #### Integration with git
@@ -74,12 +74,17 @@ git show HEAD | path/to/diffr
 Add the following section to your `.gitconfig` file:
 
 ```
-[pager]
-    log  = path/to/diffr | less -R
-    show = path/to/diffr | less -R
-    diff = path/to/diffr | less -R
+[core]
+    pager = diffr | less -R
 [interactive]
-    diffFilter = path/to/diffr
+    diffFilter = diffr
+```
+
+Alternatively, you can run from the command line:
+
+```
+git config --global core.pager 'diffr | less -R'
+git config --global interactive.difffilter diffr
 ```
 
 #### Color customization
