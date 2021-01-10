@@ -17,7 +17,7 @@ use diffr_lib::Tokenization;
 
 mod cli_args;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub enum LineNumberStyle {
     Compact,
     Aligned,
