@@ -209,3 +209,36 @@ fn color_ok_multiple() {
         is_success: true,
     })
 }
+
+#[test]
+fn line_numbers_style() {
+    // TODO  check config?
+
+    // ok
+    test_cli(ProcessTest {
+        args: &["--line-numbers"],
+        out: Empty,
+        err: Empty,
+        is_success: true,
+    });
+    test_cli(ProcessTest {
+        args: &["--line-numbers", "compact"],
+        out: Empty,
+        err: Empty,
+        is_success: true,
+    });
+    test_cli(ProcessTest {
+        args: &["--line-numbers", "aligned"],
+        out: Empty,
+        err: Empty,
+        is_success: true,
+    });
+
+    // fail
+    test_cli(ProcessTest {
+        args: &["--line-numbers", "foo"],
+        out: Empty,
+        err: Exactly("unexpected line number style: got 'foo', expected aligned|compact"),
+        is_success: false,
+    });
+}

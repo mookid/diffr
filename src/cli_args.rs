@@ -1,9 +1,16 @@
 use super::AppConfig;
-use clap::{App, AppSettings, Arg, ArgMatches};
+use super::LineNumberStyle;
+use clap::App;
+use clap::AppSettings;
+use clap::Arg;
+use clap::ArgMatches;
 use std::fmt::Display;
-use std::fmt::{Error as FmtErr, Formatter};
+use std::fmt::Error as FmtErr;
+use std::fmt::Formatter;
 use std::str::FromStr;
-use termcolor::{Color, ColorSpec, ParseColorError};
+use termcolor::Color;
+use termcolor::ColorSpec;
+use termcolor::ParseColorError;
 
 const ABOUT: &str = "
 diffr adds word-level diff on top of unified diffs.
@@ -104,6 +111,19 @@ where
 }
 
 #[derive(Debug, Clone, Copy)]
+struct LineNumberStyleOpt(LineNumberStyle);
+
+impl EnumString for LineNumberStyleOpt {
+    fn data() -> &'static [(&'static str, Self)] {
+        use LineNumberStyle::*;
+        &[
+            ("aligned", LineNumberStyleOpt(Aligned)),
+            ("compact", LineNumberStyleOpt(Compact)),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 enum FaceColor {
     Foreground,
     Background,
@@ -144,6 +164,7 @@ enum ArgParsingError {
     AttributeName(String),
     Color(ParseColorError),
     MissingValue(FaceName),
+    LineNumberStyle(String),
 }
 
 impl Display for ArgParsingError {
@@ -157,6 +178,9 @@ impl Display for ArgParsingError {
                 "error parsing color: missing color value for face '{}'",
                 face_name
             ),
+            ArgParsingError::LineNumberStyle(err) => {
+                write!(f, "unexpected line number style: {}", err)
+            }
         }
     }
 }
@@ -175,7 +199,30 @@ impl FromStr for AttributeName {
     }
 }
 
+impl FromStr for LineNumberStyleOpt {
+    type Err = ArgParsingError;
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        tryparse(input).map_err(ArgParsingError::LineNumberStyle)
+    }
+}
+
 fn ignore<T>(_: T) {}
+
+fn parse_line_number_style<'a, Values>(
+    config: &mut AppConfig,
+    values: Values,
+) -> Result<(), ArgParsingError>
+where
+    Values: Iterator<Item = &'a str>,
+{
+    let style = if let Some(style) = values.last() {
+        style.parse::<LineNumberStyleOpt>()?.0
+    } else {
+        LineNumberStyle::Compact
+    };
+    config.line_numbers_style = Some(style);
+    Ok(())
+}
 
 fn parse_color_attributes<'a, Values>(
     config: &mut AppConfig,
@@ -293,9 +340,21 @@ a blue background, written with a bold font.",
         .arg(
             Arg::with_name(FLAG_LINE_NUMBERS)
                 .long(FLAG_LINE_NUMBERS)
-                .help("Display line numbers."),
+                .value_name("compact|aligned")
+                .default_value("compact")
+                .help("Display line numbers. Style is optional.")
+                .long_help(
+                    "Display line numbers. Style is optional.
+When style = 'compact', take as little width as possible.
+When style = 'aligned', align to tab stops (useful if tab is used for indentation).",
+                ),
         )
         .get_matches()
+}
+
+fn die(err: ArgParsingError) -> ! {
+    eprintln!("{}", err);
+    std::process::exit(-1)
 }
 
 pub fn parse_config() -> AppConfig {
@@ -308,12 +367,17 @@ pub fn parse_config() -> AppConfig {
     let mut config = AppConfig::default();
     config.debug = matches.is_present(FLAG_DEBUG);
     config.html = matches.is_present(FLAG_HTML);
-    config.line_numbers = matches.is_present(FLAG_LINE_NUMBERS);
+    if matches.occurrences_of(FLAG_LINE_NUMBERS) != 0 {
+        if let Some(values) = matches.values_of(FLAG_LINE_NUMBERS) {
+            if let Err(err) = parse_line_number_style(&mut config, values) {
+                die(err);
+            }
+        }
+    };
 
     if let Some(values) = matches.values_of(FLAG_COLOR) {
         if let Err(err) = parse_color_args(&mut config, values) {
-            eprintln!("{}", err);
-            std::process::exit(-1)
+            die(err);
         }
     }
     config
