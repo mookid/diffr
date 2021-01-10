@@ -584,13 +584,13 @@ impl<'a> HunkBuffer<'a> {
                             &mut shared_removed,
                         )
                     };
-                    if config.line_numbers_style.is_some() {
+                    if config.has_line_numbers() {
                         margin.write_margin_changed(is_plus, config, out)?
                     }
                     Self::paint_line(toks.data(), &range, nhl, hl, shared, out)?;
                 }
                 _ => {
-                    if config.line_numbers_style.is_some() {
+                    if config.has_line_numbers() {
                         margin.write_margin_context(config, out)?
                     }
                     output(data, range.0, range.1, &defaultspec, out)?
