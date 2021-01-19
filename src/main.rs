@@ -17,11 +17,17 @@ use diffr_lib::Tokenization;
 
 mod cli_args;
 
+#[derive(Debug, Clone, Copy)]
+pub enum LineNumberStyle {
+    Compact,
+    Aligned,
+}
+
 #[derive(Debug)]
 pub struct AppConfig {
     debug: bool,
     html: bool,
-    line_numbers: bool,
+    line_numbers_style: Option<LineNumberStyle>,
     added_face: ColorSpec,
     refine_added_face: ColorSpec,
     removed_face: ColorSpec,
@@ -33,12 +39,25 @@ impl Default for AppConfig {
         AppConfig {
             debug: false,
             html: false,
-            line_numbers: false,
+            line_numbers_style: None,
             added_face: color_spec(Some(Green), None, false),
             refine_added_face: color_spec(Some(White), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
             refine_removed_face: color_spec(Some(White), Some(Red), true),
         }
+    }
+}
+
+impl AppConfig {
+    fn has_line_numbers(&self) -> bool {
+        self.line_numbers_style.is_some()
+    }
+
+    fn line_numbers_aligned(&self) -> bool {
+        if let Some(LineNumberStyle::Aligned) = self.line_numbers_style {
+            return true;
+        }
+        false
     }
 }
 
@@ -304,6 +323,8 @@ struct Margin<'a> {
     half_margin: usize,
 }
 
+const MARGIN_TAB_STOP: usize = 8;
+
 impl<'a> Margin<'a> {
     fn new(header: &'a HunkHeader, margin: &'a mut [u8]) -> Self {
         let full_margin = header.width();
@@ -325,36 +346,57 @@ impl<'a> Margin<'a> {
         }
     }
 
+    fn write_margin_padding(&mut self, out: &mut impl WriteColor) -> io::Result<()> {
+        if self.margin.len() % MARGIN_TAB_STOP != 0 {
+            write!(out, "\t")?;
+        }
+        Ok(())
+    }
+
     fn write_margin_changed(
         &mut self,
         is_plus: bool,
-        color: &ColorSpec,
+        config: &AppConfig,
         out: &mut impl WriteColor,
     ) -> io::Result<()> {
         let mut margin_buf = &mut self.margin[..];
+        let color;
         if is_plus {
+            color = &config.added_face;
             if self.lino_minus != 0 {
                 write!(margin_buf, "{:w$} ", ' ', w = self.half_margin)?;
             }
             write!(margin_buf, "{:w$}", self.lino_plus, w = self.half_margin)?;
             self.lino_plus += 1;
         } else {
+            color = &config.removed_face;
             write!(margin_buf, "{:w$}", self.lino_minus, w = self.half_margin)?;
             if self.lino_plus != 0 {
                 write!(margin_buf, " {:w$}", ' ', w = self.half_margin)?;
             }
             self.lino_minus += 1;
         };
-        output(self.margin, 0, self.margin.len(), color, out)
+        output(self.margin, 0, self.margin.len(), color, out)?;
+        if config.line_numbers_aligned() {
+            self.write_margin_padding(out)?;
+        }
+        Ok(())
     }
 
-    fn write_margin_context(&mut self, out: &mut impl WriteColor) -> io::Result<()> {
+    fn write_margin_context(
+        &mut self,
+        config: &AppConfig,
+        out: &mut impl WriteColor,
+    ) -> io::Result<()> {
         if self.lino_minus != self.lino_plus {
             write!(out, "{:w$}", self.lino_minus, w = self.half_margin)?;
         } else {
             write!(out, "{:w$}", ' ', w = self.half_margin)?;
         }
         write!(out, " {:w$}", self.lino_plus, w = self.half_margin)?;
+        if config.line_numbers_aligned() {
+            self.write_margin_padding(out)?;
+        }
         self.lino_minus += 1;
         self.lino_plus += 1;
         Ok(())
@@ -542,14 +584,14 @@ impl<'a> HunkBuffer<'a> {
                             &mut shared_removed,
                         )
                     };
-                    if config.line_numbers {
-                        margin.write_margin_changed(is_plus, nhl, out)?
+                    if config.has_line_numbers() {
+                        margin.write_margin_changed(is_plus, config, out)?
                     }
                     Self::paint_line(toks.data(), &range, nhl, hl, shared, out)?;
                 }
                 _ => {
-                    if config.line_numbers {
-                        margin.write_margin_context(out)?
+                    if config.has_line_numbers() {
+                        margin.write_margin_context(config, out)?
                     }
                     output(data, range.0, range.1, &defaultspec, out)?
                 }
@@ -637,7 +679,7 @@ impl<'a> HunkBuffer<'a> {
             if !in_hunk {
                 hunk_line_number = 0;
                 in_hunk = first == Some(b'@');
-                if self.config.line_numbers && in_hunk {
+                if self.config.has_line_numbers() && in_hunk {
                     self.line_number_info = parse_line_number(&buffer);
                 }
                 output(&buffer, 0, buffer.len(), &ColorSpec::default(), &mut stdout)?;
