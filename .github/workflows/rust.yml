@@ -1,0 +1,59 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+        rust:
+          - stable
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        profile: minimal
+        override: true
+        components: rustfmt
+
+    - name: Build
+      run: cargo build --verbose
+    - name: Build release
+      run: cargo build --verbose --release
+    - name: Build tests
+      run: cargo test --verbose --no-run
+      
+    - name: Run tests
+      run: cargo test --verbose
+    
+    - name: Integration test
+      run: |
+        set -e
+        cargo install --git https://github.com/mookid/trimcolor
+        git log -p >whole_log
+        cargo run <whole_log | trimcolor >whole_log_diffr
+        if git diff --no-index whole_log whole_log_diffr
+        then
+                exit 0
+        else
+                exit 1
+        fi
+
+    - name: Check fmt
+      run: cargo fmt --all -- --check
+      if: matrix.rust == 'stable'
