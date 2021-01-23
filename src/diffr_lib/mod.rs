@@ -14,6 +14,7 @@ use std::fmt::Debug;
 use std::fmt::{Error as FmtErr, Formatter};
 
 mod best_projection;
+pub use best_projection::optimize_partition;
 
 type Span = (usize, usize);
 
@@ -635,8 +636,6 @@ fn classify_byte(b: u8) -> TokenKind {
         _ => TokenKind::Other,
     }
 }
-
-pub use best_projection::optimize_partition;
 
 #[cfg(test)]
 mod tests_lib;
