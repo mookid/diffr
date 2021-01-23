@@ -53,6 +53,7 @@ jobs:
         else
                 exit 1
         fi
+      if: matrix.os == 'ubuntu-latest'
 
     - name: Check fmt
       run: cargo fmt --all -- --check
