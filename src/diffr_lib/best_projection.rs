@@ -2,8 +2,8 @@ use std::collections::hash_map::Entry::*;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use crate::TokenId;
-use crate::Tokenization;
+use super::TokenId;
+use super::Tokenization;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy, Hash)]
 struct Coord {

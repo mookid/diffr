@@ -26,12 +26,4 @@ steps:
     parameters:
       crate_path: .
 
-  - template: ci/azure-rustfmt.yml
-    parameters:
-      crate_path: diffr-lib
-
-  - template: ci/azure-runtests.yml
-    parameters:
-      crate_path: diffr-lib
-
   - template: ci/azure_integration_test.yml
