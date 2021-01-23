@@ -13,6 +13,8 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::fmt::{Error as FmtErr, Formatter};
 
+mod best_projection;
+
 type Span = (usize, usize);
 
 type TokenId = u64;
@@ -223,7 +225,7 @@ impl<'a> DiffInput<'a> {
 struct DiffTraversal<'a> {
     v: &'a mut [isize],
     max: usize,
-    end: (isize, isize),
+    _end: (isize, isize),
 }
 
 impl<'a> DiffTraversal<'a> {
@@ -235,13 +237,14 @@ impl<'a> DiffTraversal<'a> {
         );
         assert!(max * 2 + 1 <= v.len());
         let (start, end) = if forward { (start, end) } else { (end, start) };
-        let mut res = DiffTraversal { v, max, end };
+        let mut res = DiffTraversal { v, max, _end: end };
         if max != 0 {
             *res.v_mut(1) = start.0 - input.removed.start_index
         }
         res
     }
 
+    #[cfg(test)]
     fn from_vector(
         input: &'a DiffInput<'a>,
         v: &'a mut Vec<isize>,
@@ -261,6 +264,7 @@ impl<'a> DiffTraversal<'a> {
     }
 }
 
+#[cfg(test)]
 fn diff_sequences_kernel_forward(
     input: &DiffInput,
     ctx: &mut DiffTraversal,
@@ -282,13 +286,14 @@ fn diff_sequences_kernel_forward(
             y += 1;
         }
         *ctx.v_mut(k) = x;
-        if ctx.end == (x, y) {
+        if ctx._end == (x, y) {
             return Some(to_usize(d));
         }
     }
     None
 }
 
+#[cfg(test)]
 fn diff_sequences_kernel_backward(
     input: &DiffInput,
     ctx: &mut DiffTraversal,
@@ -311,7 +316,7 @@ fn diff_sequences_kernel_backward(
             y -= 1;
         }
         *ctx.v_mut(k) = x - 1;
-        if ctx.end == (x, y) {
+        if ctx._end == (x, y) {
             return Some(to_usize(d));
         }
     }
@@ -467,16 +472,19 @@ fn diff_sequences_kernel_bidirectional(
 
 /// Compute the length of the edit script for `input`.
 /// This is the forward version.
-pub fn diff_sequences_simple_forward(input: &DiffInput, v: &mut Vec<isize>) -> usize {
+#[cfg(test)]
+fn diff_sequences_simple_forward(input: &DiffInput, v: &mut Vec<isize>) -> usize {
     diff_sequences_simple(input, v, true)
 }
 
 /// Compute the length of the edit script for `input`.
 /// This is the backward version.
-pub fn diff_sequences_simple_backward(input: &DiffInput, v: &mut Vec<isize>) -> usize {
+#[cfg(test)]
+fn diff_sequences_simple_backward(input: &DiffInput, v: &mut Vec<isize>) -> usize {
     diff_sequences_simple(input, v, false)
 }
 
+#[cfg(test)]
 fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<isize>, forward: bool) -> usize {
     let max_result = input.n() + input.m();
     let ctx = &mut DiffTraversal::from_vector(input, v, forward, max_result);
@@ -560,7 +568,8 @@ fn find_splitting_point(input: &DiffInput) -> SplittingPoint {
 
 /// Compute the length of the edit script for `input`.
 /// This is the bidirectional version.
-pub fn diff_sequences_bidirectional(input: &DiffInput, v: &mut Vec<isize>) -> usize {
+#[cfg(test)]
+fn diff_sequences_bidirectional(input: &DiffInput, v: &mut Vec<isize>) -> usize {
     if input.n() + input.m() == 0 {
         return 0;
     }
@@ -627,9 +636,7 @@ fn classify_byte(b: u8) -> TokenKind {
     }
 }
 
-mod best_projection;
-pub use crate::best_projection::optimize_partition;
-pub use crate::best_projection::NormalizationResult;
+pub use best_projection::optimize_partition;
 
 #[cfg(test)]
-mod test;
+mod tests_lib;

@@ -3,19 +3,14 @@ use std::io::{self, BufRead, Write};
 use std::iter::Peekable;
 use std::time::SystemTime;
 use termcolor::{
-    Color,
-    Color::{Green, Red, White},
+    Color::{self, Green, Red, White},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
-use diffr_lib::optimize_partition;
-use diffr_lib::DiffInput;
-use diffr_lib::LineSplit;
-use diffr_lib::Snake;
-use diffr_lib::TokenMap;
-use diffr_lib::Tokenization;
+use diffr_lib::*;
 
 mod cli_args;
+mod diffr_lib;
 
 #[derive(Debug, Clone, Copy)]
 pub enum LineNumberStyle {
@@ -991,7 +986,7 @@ fn parse_line_number(buf: &[u8]) -> Option<HunkHeader> {
 }
 
 #[cfg(test)]
-mod test;
+mod tests_app;
 
 #[cfg(test)]
-mod test_cli;
+mod tests_cli;
