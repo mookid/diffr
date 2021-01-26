@@ -58,3 +58,8 @@ jobs:
     - name: Check fmt
       run: cargo fmt --all -- --check
       if: matrix.rust == 'stable'
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: upload artifacts
+        path: target
