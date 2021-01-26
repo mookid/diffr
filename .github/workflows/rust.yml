@@ -61,7 +61,6 @@ jobs:
 
     - uses: actions/upload-artifact@v2
       name: upload artifacts
-      if: matrix.os == 'windows-latest'
       with:
         path: target/release/*.exe
-        name: diffr-$GITHUB_SHA.exe
+        name: diffr-${{ GITHUB_SHA }}-${{ matrix.os }}
