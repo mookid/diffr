@@ -63,4 +63,4 @@ jobs:
       name: upload artifacts
       with:
         path: target/release/*.exe
-        name: diffr-${{ GITHUB_SHA }}-${{ matrix.os }}
+        name: diffr-${{ github.sha }}-${{ matrix.os }}
