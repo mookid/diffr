@@ -62,4 +62,5 @@ jobs:
     - uses: actions/upload-artifact@v2
       with:
         name: upload artifacts
-        path: target
+        path: target/release
+        if: matrix.os == windows-latest
