@@ -62,5 +62,7 @@ jobs:
     - uses: actions/upload-artifact@v2
       name: upload artifacts
       with:
-        path: target/release/diffr(.exe)?
+        path: |
+          target/release/diffr
+          target/release/diffr.exe
         name: diffr-${{ github.sha }}-${{ matrix.os }}
