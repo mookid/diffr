@@ -1,4 +1,4 @@
-diffr 0.1.4
+diffr $VERSION
 Nathan Moreau <nathan.moreau@m4x.org>
 
 diffr adds word-level diff on top of unified diffs.

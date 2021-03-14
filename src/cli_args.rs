@@ -21,6 +21,10 @@ const FLAG_LINE_NUMBERS: &str = "--line-numbers";
 const BIN_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+const USAGE: &str = include_str!("../assets/usage.txt");
+const HELP_SHORT: &str = include_str!("../assets/h.txt");
+const HELP_LONG: &str = include_str!("../assets/help.txt");
+
 fn show_version() -> ! {
     eprintln!("{} {}", BIN_NAME, VERSION);
     process::exit(0);
@@ -39,19 +43,20 @@ fn missing_arg(arg: impl std::fmt::Display) -> ! {
     process::exit(2);
 }
 
+fn interpolate(s: &str) -> String {
+    s.replace("$VERSION", VERSION)
+}
+
 fn usage(code: i32) -> ! {
-    let txt = include_str!("../assets/usage.txt").as_bytes();
-    let _ = std::io::stderr().write(txt);
+    let txt = interpolate(USAGE);
+    let _ = std::io::stderr().write(txt.as_bytes());
     process::exit(code);
 }
 
 fn help(long: bool) -> ! {
-    let txt = if long {
-        include_str!("../assets/help.txt").as_bytes()
-    } else {
-        include_str!("../assets/h.txt").as_bytes()
-    };
-    let _ = std::io::stdout().write(txt);
+    let txt = if long { HELP_LONG } else { HELP_SHORT };
+    let txt = interpolate(txt);
+    let _ = std::io::stdout().write(txt.as_bytes());
     process::exit(0);
 }
 
@@ -300,8 +305,7 @@ fn color(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String
 }
 
 fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
-    let _ = args.next().unwrap();
-
+    args.next();
     let spec = if let Some(spec) = args.next() {
         parse_line_number_style(config, Some(&*spec))
     } else {
