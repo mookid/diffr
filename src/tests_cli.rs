@@ -242,3 +242,13 @@ fn line_numbers_style() {
         is_success: false,
     });
 }
+
+#[test]
+fn test_bad_argument() {
+    test_cli(ProcessTest {
+        args: &["--invalid-option"],
+        out: Empty,
+        err: AtLeast("bad argument: '--invalid-option'"),
+        is_success: false,
+    });
+}
