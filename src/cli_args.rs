@@ -1,32 +1,34 @@
 use super::AppConfig;
 use super::LineNumberStyle;
-use clap::App;
-use clap::AppSettings;
-use clap::Arg;
-use clap::ArgMatches;
+
 use std::fmt::Display;
 use std::fmt::Error as FmtErr;
 use std::fmt::Formatter;
+use std::io::Write;
+use std::iter::Peekable;
+use std::process;
 use std::str::FromStr;
+
 use termcolor::Color;
 use termcolor::ColorSpec;
 use termcolor::ParseColorError;
-
-const ABOUT: &str = "
-diffr adds word-level diff on top of unified diffs.
-word-level diff information is displayed using text attributes.";
-
-const USAGE: &str = "\
-diffr reads from standard input and write to standard output.
-
-    Typical usage is for interactive use of diff:
-    diff -u <file1> <file2> | diffr
-    git show | diffr";
 
 const FLAG_DEBUG: &str = "--debug";
 const FLAG_HTML: &str = "--html";
 const FLAG_COLOR: &str = "--colors";
 const FLAG_LINE_NUMBERS: &str = "--line-numbers";
+
+const BIN_NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const USAGE: &str = include_str!("../assets/usage.txt");
+const HELP_SHORT: &str = include_str!("../assets/h.txt");
+const HELP_LONG: &str = include_str!("../assets/help.txt");
+
+fn show_version() -> ! {
+    eprintln!("{} {}", BIN_NAME, VERSION);
+    process::exit(0);
+}
 
 #[derive(Debug, Clone, Copy)]
 enum FaceName {
@@ -34,6 +36,28 @@ enum FaceName {
     RefineAdded,
     Removed,
     RefineRemoved,
+}
+
+fn missing_arg(arg: impl std::fmt::Display) -> ! {
+    eprintln!("option requires an argument: '{}'", arg);
+    process::exit(2);
+}
+
+fn interpolate(s: &str) -> String {
+    s.replace("$VERSION", VERSION)
+}
+
+fn usage(code: i32) -> ! {
+    let txt = interpolate(USAGE);
+    let _ = std::io::stderr().write(txt.as_bytes());
+    process::exit(code);
+}
+
+fn help(long: bool) -> ! {
+    let txt = if long { HELP_LONG } else { HELP_SHORT };
+    let txt = interpolate(txt);
+    let _ = std::io::stdout().write(txt.as_bytes());
+    process::exit(0);
 }
 
 impl EnumString for FaceName {
@@ -208,14 +232,11 @@ impl FromStr for LineNumberStyleOpt {
 
 fn ignore<T>(_: T) {}
 
-fn parse_line_number_style<'a, Values>(
+fn parse_line_number_style<'a>(
     config: &mut AppConfig,
-    values: Values,
-) -> Result<(), ArgParsingError>
-where
-    Values: Iterator<Item = &'a str>,
-{
-    let style = if let Some(style) = values.last() {
+    value: Option<&'a str>,
+) -> Result<(), ArgParsingError> {
+    let style = if let Some(style) = value {
         style.parse::<LineNumberStyleOpt>()?.0
     } else {
         LineNumberStyle::Compact
@@ -258,127 +279,90 @@ where
     Ok(())
 }
 
-fn parse_color_args<'a, Values>(
-    config: &mut AppConfig,
-    values: Values,
-) -> Result<(), ArgParsingError>
-where
-    Values: Iterator<Item = &'a str>,
-{
-    for value in values {
-        let mut pieces = value.split(':');
-        if let Some(piece) = pieces.next() {
-            let face_name = piece.parse::<FaceName>()?;
-            parse_color_attributes(config, pieces, face_name)?;
-        }
+fn parse_color_arg(value: &str, config: &mut AppConfig) -> Result<(), ArgParsingError> {
+    let mut pieces = value.split(':');
+    Ok(if let Some(piece) = pieces.next() {
+        let face_name = piece.parse::<FaceName>()?;
+        parse_color_attributes(config, pieces, face_name)?;
+    })
+}
+
+fn die_error<TRes>(result: Result<TRes, ArgParsingError>) -> bool {
+    if let Err(err) = result {
+        eprintln!("{}", err);
+        process::exit(-1);
     }
-    Ok(())
+    true
 }
 
-fn get_matches() -> ArgMatches<'static> {
-    App::new("diffr")
-        .setting(AppSettings::UnifiedHelpMessage)
-        .version("0.1.4")
-        .author("Nathan Moreau <nathan.moreau@m4x.org>")
-        .about(ABOUT)
-        .usage(USAGE)
-        .arg(Arg::with_name(FLAG_DEBUG).long(FLAG_DEBUG).hidden(true))
-        .arg(Arg::with_name(FLAG_HTML).long(FLAG_HTML).hidden(true))
-        .arg(
-            Arg::with_name(FLAG_COLOR)
-                .long(FLAG_COLOR)
-                .value_name("COLOR_SPEC")
-                .takes_value(true)
-                .multiple(true)
-                .number_of_values(1)
-                .help("Configure color settings.")
-                .long_help(
-                    "Configure color settings for console ouput.
-
-There are four faces to customize:
-+----------------+--------------+----------------+
-|  line prefix   |      +       |       -        |
-+----------------+--------------+----------------+
-| common segment |    added     |    removed     |
-| unique segment | refine-added | refine-removed |
-+----------------+--------------+----------------+
-
-The customization allows
-- to change the foreground or background color;
-- to set or unset the attributes 'bold', 'intense', 'underline';
-- to clear all attributes.
-
-Customization is done passing a color_spec argument.
-This flag may be provided multiple times.
-
-The syntax is the following:
-
-color_spec = face-name + ':' + attributes
-attributes = attribute
-           | attribute + ':' + attributes
-attribute  = ('foreground' | 'background') + ':' + color
-           | (<empty> | 'no') + font-flag
-           | 'none'
-font-flag  = 'italic'
-           | 'bold'
-           | 'intense'
-           | 'underline'
-color      = 'none'
-           | [0-255]
-           | [0-255] + ',' + [0-255] + ',' + [0-255]
-           | ('black', 'blue', 'green', 'red',
-              'cyan', 'magenta', 'yellow', 'white')
-
-For example, the color_spec
-
-    'refine-added:background:blue:bold'
-
-sets the color of unique added segments with
-a blue background, written with a bold font.",
-                ),
-        )
-        .arg(
-            Arg::with_name(FLAG_LINE_NUMBERS)
-                .long(FLAG_LINE_NUMBERS)
-                .value_name("compact|aligned")
-                .default_value("compact")
-                .help("Display line numbers. Style is optional.")
-                .long_help(
-                    "Display line numbers. Style is optional.
-When style = 'compact', take as little width as possible.
-When style = 'aligned', align to tab stops (useful if tab is used for indentation).",
-                ),
-        )
-        .get_matches()
+fn color(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
+    let arg = args.next().unwrap();
+    if let Some(spec) = args.next() {
+        die_error(parse_color_arg(&spec, config))
+    } else {
+        missing_arg(arg)
+    }
 }
 
-fn die(err: ArgParsingError) -> ! {
-    eprintln!("{}", err);
-    std::process::exit(-1)
+fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
+    args.next();
+    let spec = if let Some(spec) = args.next() {
+        parse_line_number_style(config, Some(&*spec))
+    } else {
+        parse_line_number_style(config, None)
+    };
+    die_error(spec)
+}
+
+fn html(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
+    config.html = true;
+    args.next();
+    true
+}
+
+fn debug(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
+    config.debug = true;
+    args.next();
+    true
+}
+
+fn bad_arg(arg: &str) -> ! {
+    eprintln!("bad argument: '{}'", arg);
+    usage(2);
+}
+
+fn parse_options(
+    config: &mut AppConfig,
+    args: &mut Peekable<impl Iterator<Item = String>>,
+) -> bool {
+    if let Some(arg) = args.peek() {
+        match &arg[..] {
+            // generic flags
+            "-h" | "--help" => help(&arg[..] == "--help"),
+            "-V" | "--version" => show_version(),
+
+            // documented flags
+            FLAG_COLOR => color(config, args),
+            FLAG_LINE_NUMBERS => line_numbers(config, args),
+
+            // hidden flags
+            FLAG_DEBUG => debug(config, args),
+            FLAG_HTML => html(config, args),
+
+            arg => bad_arg(arg),
+        }
+    } else {
+        false
+    }
 }
 
 pub fn parse_config() -> AppConfig {
-    let matches = get_matches();
-    if atty::is(atty::Stream::Stdin) {
-        eprintln!("{}", matches.usage());
-        std::process::exit(-1)
-    }
-
     let mut config = AppConfig::default();
-    config.debug = matches.is_present(FLAG_DEBUG);
-    config.html = matches.is_present(FLAG_HTML);
-    if matches.occurrences_of(FLAG_LINE_NUMBERS) != 0 {
-        if let Some(values) = matches.values_of(FLAG_LINE_NUMBERS) {
-            if let Err(err) = parse_line_number_style(&mut config, values) {
-                die(err);
-            }
-        }
-    };
+    let mut args = std::env::args().skip(1).peekable();
+    while parse_options(&mut config, &mut args) {}
 
-    if let Some(values) = matches.values_of(FLAG_COLOR) {
-        if let Err(err) = parse_color_args(&mut config, values) {
-            die(err);
-        }
+    if atty::is(atty::Stream::Stdin) {
+        usage(-1);
     }
     config
 }

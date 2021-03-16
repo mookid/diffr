@@ -1,0 +1,18 @@
+diffr $VERSION
+Nathan Moreau <nathan.moreau@m4x.org>
+
+diffr adds word-level diff on top of unified diffs.
+word-level diff information is displayed using text attributes.
+
+USAGE:
+    diffr reads from standard input and writes to standard output.
+
+    Typical usage is for interactive use of diff:
+    diff -u <file1> <file2> | diffr
+    git show | diffr
+
+OPTIONS:
+        --colors <COLOR_SPEC>...    Configure color settings.
+        --line-numbers              Display line numbers.
+    -h, --help                      Prints help information
+    -V, --version                   Prints version information
