@@ -182,6 +182,10 @@ impl<'a> DiffInput<'a> {
         }
     }
 
+    pub fn to_owned(&'a self) -> Self {
+        Self::new(self.added(), self.removed())
+    }
+
     pub fn added(&self) -> &Tokenization<'a> {
         self.added.t
     }
@@ -504,38 +508,48 @@ fn diff_sequences_simple(input: &DiffInput, v: &mut Vec<isize>, forward: bool) -
 /// Compute the longest common subsequence for `input` into `dst`.
 pub fn diff(input: &DiffInput, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
     dst.clear();
-    diff_rec(input, v, dst)
-}
-
-fn diff_rec(input: &DiffInput, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
-    let n = to_isize(input.n());
-    fn trivial_diff(tok: &TokenizationRange) -> bool {
-        tok.one_past_end_index <= tok.start_index
+    enum Task<'a> {
+        Diff(DiffInput<'a>),
+        PushSnake(Snake),
     }
+    use Task::*;
 
-    if trivial_diff(&input.removed) || trivial_diff(&input.added) {
-        return;
-    }
+    let mut todo = vec![Diff(input.to_owned())];
+    while let Some(task) = todo.pop() {
+        match task {
+            Diff(input) => {
+                let n = to_isize(input.n());
+                fn trivial_diff(tok: &TokenizationRange) -> bool {
+                    tok.one_past_end_index <= tok.start_index
+                }
 
-    let (snake, d) = diff_sequences_bidirectional_snake(input, v);
-    let &Snake { x0, y0, len } = &snake;
-    if 1 < d {
-        let (input1, input2) = input.split_at((x0, y0), (x0 + len, y0 + len));
-        diff_rec(&input1, v, dst);
-        if len != 0 {
-            dst.push(snake);
-        }
-        diff_rec(&input2, v, dst);
-    } else {
-        let SplittingPoint { sp, dx, dy } = find_splitting_point(&input);
-        let x0 = input.removed.start_index;
-        let y0 = input.added.start_index;
-        if sp != 0 {
-            dst.push(Snake::default().from(x0, y0).len(sp));
-        }
-        let len = n - sp - dx;
-        if len != 0 {
-            dst.push(Snake::default().from(x0 + sp + dx, y0 + sp + dy).len(len));
+                if trivial_diff(&input.removed) || trivial_diff(&input.added) {
+                    continue;
+                }
+
+                let (snake, d) = diff_sequences_bidirectional_snake(&input, v);
+                let &Snake { x0, y0, len } = &snake;
+                if 1 < d {
+                    let (input1, input2) = input.split_at((x0, y0), (x0 + len, y0 + len));
+                    todo.push(Diff(input2));
+                    if len != 0 {
+                        todo.push(PushSnake(snake));
+                    }
+                    todo.push(Diff(input1));
+                } else {
+                    let SplittingPoint { sp, dx, dy } = find_splitting_point(&input);
+                    let x0 = input.removed.start_index;
+                    let y0 = input.added.start_index;
+                    if sp != 0 {
+                        dst.push(Snake::default().from(x0, y0).len(sp));
+                    }
+                    let len = n - sp - dx;
+                    if len != 0 {
+                        dst.push(Snake::default().from(x0 + sp + dx, y0 + sp + dy).len(len));
+                    }
+                }
+            }
+            PushSnake(snake) => dst.push(snake),
         }
     }
 }
