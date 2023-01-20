@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Write};
 use std::iter::Peekable;
 use std::time::SystemTime;
 use termcolor::{
-    Color::{self, Green, Red, White},
+    Color::{self, Green, Red, Rgb},
     ColorChoice, ColorSpec, StandardStream, WriteColor,
 };
 
@@ -31,14 +31,18 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
+        // The ANSI white is actually gray on many implementations. The actual white
+        // that seem to work on all implementations is "bright white". `termcolor`
+        // crate has no enum member for it, so we create it with Rgb.
+        let bright_white = Rgb(255, 255, 255);
         AppConfig {
             debug: false,
             html: false,
             line_numbers_style: None,
             added_face: color_spec(Some(Green), None, false),
-            refine_added_face: color_spec(Some(White), Some(Green), true),
+            refine_added_face: color_spec(Some(bright_white), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
-            refine_removed_face: color_spec(Some(White), Some(Red), true),
+            refine_removed_face: color_spec(Some(bright_white), Some(Red), true),
         }
     }
 }
