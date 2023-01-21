@@ -296,18 +296,20 @@ fn die_error<TRes>(result: Result<TRes, ArgParsingError>) -> bool {
 }
 
 fn color(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
-    let arg = args.next().unwrap();
-    if let Some(spec) = args.next() {
-        die_error(parse_color_arg(&spec, config))
+    if let Some(spec) = args.peek() {
+        let parse_result = parse_color_arg(&spec, config);
+        args.next();
+        die_error(parse_result)
     } else {
-        missing_arg(arg)
+        missing_arg(FLAG_COLOR)
     }
 }
 
 fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
-    args.next();
-    let spec = if let Some(spec) = args.next() {
-        parse_line_number_style(config, Some(&*spec))
+    let spec = if let Some(spec) = args.peek() {
+        let parse_result = parse_line_number_style(config, Some(&*spec));
+        args.next();
+        parse_result
     } else {
         parse_line_number_style(config, None)
     };
@@ -316,13 +318,11 @@ fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item =
 
 fn html(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
     config.html = true;
-    args.next();
     true
 }
 
 fn debug(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
     config.debug = true;
-    args.next();
     true
 }
 
@@ -335,7 +335,7 @@ fn parse_options(
     config: &mut AppConfig,
     args: &mut Peekable<impl Iterator<Item = String>>,
 ) -> bool {
-    if let Some(arg) = args.peek() {
+    if let Some(arg) = args.next() {
         match &arg[..] {
             // generic flags
             "-h" | "--help" => help(&arg[..] == "--help"),
