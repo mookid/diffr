@@ -307,9 +307,13 @@ fn color(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String
 
 fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
     let spec = if let Some(spec) = args.peek() {
-        let parse_result = parse_line_number_style(config, Some(&*spec));
-        args.next();
-        parse_result
+        if spec.starts_with("-") { // next option
+            parse_line_number_style(config, None)
+        } else {
+            let parse_result = parse_line_number_style(config, Some(&*spec));
+            args.next();
+            parse_result
+        }
     } else {
         parse_line_number_style(config, None)
     };

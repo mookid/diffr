@@ -233,6 +233,12 @@ fn line_numbers_style() {
         err: Empty,
         is_success: true,
     });
+    test_cli(ProcessTest {
+        args: &["--line-numbers", "--line-numbers"],
+        out: Empty,
+        err: Empty,
+        is_success: true,
+    });
 
     // fail
     test_cli(ProcessTest {
