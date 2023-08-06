@@ -22,29 +22,23 @@ impl StringTest {
         match self {
             Empty => assert!(
                 actual.is_empty(),
-                format!(
-                    "{}: expected empty, got\n\n{}",
-                    quote_or_empty(prefix),
-                    quote_or_empty(actual)
-                )
+                "{}: expected empty, got\n\n{}",
+                quote_or_empty(prefix),
+                quote_or_empty(actual)
             ),
             AtLeast(exp) => assert!(
                 actual.contains(exp),
-                format!(
-                    "{}: expected at least\n\n{}\n\ngot\n\n{}",
-                    prefix,
-                    quote_or_empty(exp),
-                    quote_or_empty(actual)
-                )
+                "{}: expected at least\n\n{}\n\ngot\n\n{}",
+                prefix,
+                quote_or_empty(exp),
+                quote_or_empty(actual)
             ),
             Exactly(exp) => assert!(
                 actual.trim() == exp.trim(),
-                format!(
-                    "{}: expected\n\n{}\n\ngot\n\n{}",
-                    prefix,
-                    quote_or_empty(exp),
-                    quote_or_empty(actual)
-                )
+                "{}: expected\n\n{}\n\ngot\n\n{}",
+                prefix,
+                quote_or_empty(exp),
+                quote_or_empty(actual)
             ),
         }
     }
@@ -88,14 +82,12 @@ fn test_cli(descr: ProcessTest) {
         } else {
             "failure"
         }
-    };
+    }
     assert!(
         descr.is_success == output.status.success(),
-        format!(
-            "unexpected status: expected {} got {}",
-            string_of_status(descr.is_success),
-            string_of_status(output.status.success()),
-        )
+        "unexpected status: expected {} got {}",
+        string_of_status(descr.is_success),
+        string_of_status(output.status.success()),
     );
     descr
         .out
