@@ -4,6 +4,7 @@ use super::LineNumberStyle;
 use std::fmt::Display;
 use std::fmt::Error as FmtErr;
 use std::fmt::Formatter;
+use std::io::IsTerminal;
 use std::io::Write;
 use std::iter::Peekable;
 use std::process;
@@ -383,7 +384,7 @@ pub fn parse_config() -> AppConfig {
     let mut args = args().peekable();
     while parse_options(&mut config, &mut args) {}
 
-    if atty::is(atty::Stream::Stdin) {
+    if std::io::stdin().is_terminal() {
         usage(-1);
     }
     config
