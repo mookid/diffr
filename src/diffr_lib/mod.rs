@@ -438,7 +438,8 @@ fn diff_sequences_kernel_bidirectional(
     assert!(d < ctx_fwd.max);
     assert!(d < ctx_bwd.max);
     let d = to_isize(d);
-    for k in (-d..=d).step_by(2) {
+    let mut k = -d;
+    while k <= d {
         let mut x = if k == -d || k != d && ctx_fwd.v(k - 1) < ctx_fwd.v(k + 1) {
             ctx_fwd.v(k + 1)
         } else {
@@ -454,8 +455,11 @@ fn diff_sequences_kernel_bidirectional(
             return Some((Snake::default().from(x0, y0).len(x - x0), 2 * d - 1));
         }
         *ctx_fwd.v_mut(k) = x;
+
+        k += 2;
     }
-    for k in (-d..=d).step_by(2) {
+    let mut k = -d;
+    while k <= d {
         let mut x = if k == -d || k != d && ctx_bwd.v(k + 1) < ctx_bwd.v(k - 1) {
             ctx_bwd.v(k + 1)
         } else {
@@ -471,6 +475,8 @@ fn diff_sequences_kernel_bidirectional(
             return Some((Snake::default().from(x, y).len(x1 - x), 2 * d));
         }
         *ctx_bwd.v_mut(k) = x - 1;
+
+        k += 2;
     }
     None
 }
