@@ -172,18 +172,24 @@ impl<'a> TokenizationRange<'a> {
 pub struct DiffInput<'a> {
     added: TokenizationRange<'a>,
     removed: TokenizationRange<'a>,
+    large_diff_threshold: usize,
 }
 
 impl<'a> DiffInput<'a> {
-    pub fn new(added: &'a Tokenization<'a>, removed: &'a Tokenization<'a>) -> Self {
+    pub fn new(
+        added: &'a Tokenization<'a>,
+        removed: &'a Tokenization<'a>,
+        large_diff_threshold: usize,
+    ) -> Self {
         DiffInput {
             added: TokenizationRange::new(added),
             removed: TokenizationRange::new(removed),
+            large_diff_threshold,
         }
     }
 
     pub fn to_owned(&'a self) -> Self {
-        Self::new(self.added(), self.removed())
+        Self::new(self.added(), self.removed(), self.large_diff_threshold)
     }
 
     pub fn added(&self) -> &Tokenization<'a> {
@@ -202,10 +208,12 @@ impl<'a> DiffInput<'a> {
             DiffInput {
                 added: added1,
                 removed: removed1,
+                large_diff_threshold: self.large_diff_threshold,
             },
             DiffInput {
                 added: added2,
                 removed: removed2,
+                large_diff_threshold: self.large_diff_threshold,
             },
         )
     }
@@ -533,25 +541,26 @@ pub fn diff(input: &DiffInput, v: &mut Vec<isize>, dst: &mut Vec<Snake>) {
                     continue;
                 }
 
-                let (snake, d) = diff_sequences_bidirectional_snake(&input, v);
-                let &Snake { x0, y0, len } = &snake;
-                if 1 < d {
-                    let (input1, input2) = input.split_at((x0, y0), (x0 + len, y0 + len));
-                    todo.push(Diff(input2));
-                    if len != 0 {
-                        todo.push(PushSnake(snake));
-                    }
-                    todo.push(Diff(input1));
-                } else {
-                    let SplittingPoint { sp, dx, dy } = find_splitting_point(&input);
-                    let x0 = input.removed.start_index;
-                    let y0 = input.added.start_index;
-                    if sp != 0 {
-                        dst.push(Snake::default().from(x0, y0).len(sp));
-                    }
-                    let len = n - sp - dx;
-                    if len != 0 {
-                        dst.push(Snake::default().from(x0 + sp + dx, y0 + sp + dy).len(len));
+                let snake = diff_sequences_bidirectional_snake(&input, v);
+                if let Some((snake @ Snake { x0, y0, len }, d)) = snake {
+                    if 1 < d {
+                        let (input1, input2) = input.split_at((x0, y0), (x0 + len, y0 + len));
+                        todo.push(Diff(input2));
+                        if len != 0 {
+                            todo.push(PushSnake(snake));
+                        }
+                        todo.push(Diff(input1));
+                    } else {
+                        let SplittingPoint { sp, dx, dy } = find_splitting_point(&input);
+                        let x0 = input.removed.start_index;
+                        let y0 = input.added.start_index;
+                        if sp != 0 {
+                            dst.push(Snake::default().from(x0, y0).len(sp));
+                        }
+                        let len = n - sp - dx;
+                        if len != 0 {
+                            dst.push(Snake::default().from(x0 + sp + dx, y0 + sp + dy).len(len));
+                        }
                     }
                 }
             }
@@ -594,24 +603,34 @@ fn diff_sequences_bidirectional(input: &DiffInput, v: &mut Vec<isize>) -> usize 
     if input.n() + input.m() == 0 {
         return 0;
     }
-    to_usize(diff_sequences_bidirectional_snake(input, v).1)
+    to_usize(diff_sequences_bidirectional_snake(input, v).unwrap().1)
 }
 
-fn diff_sequences_bidirectional_snake(input: &DiffInput, v: &mut Vec<isize>) -> (Snake, isize) {
-    let max = (input.n() + input.m() + 1) / 2 + 1;
+fn diff_sequences_bidirectional_snake(
+    input: &DiffInput,
+    v: &mut Vec<isize>,
+) -> Option<(Snake, isize)> {
+    let mut max = (input.n() + input.m() + 1) / 2 + 1;
+    if input.large_diff_threshold > 0 {
+        max = max.min(input.large_diff_threshold);
+    }
     let iter_len = 2 * max + 1;
     v.resize(2 * iter_len, 0);
 
     let (v1, v2) = v.split_at_mut(iter_len);
     let ctx_fwd = &mut DiffTraversal::from_slice(input, v1, true, max);
     let ctx_bwd = &mut DiffTraversal::from_slice(input, v2, false, max);
-    let mut result = (0..max)
+    let result = (0..max)
         .filter_map(|d| diff_sequences_kernel_bidirectional(input, ctx_fwd, ctx_bwd, d))
-        .next()
-        .expect("snake not found");
-    result.0.x0 += input.removed.start_index;
-    result.0.y0 += input.added.start_index;
-    result
+        .next();
+    match result {
+        Some(mut result) => {
+            result.0.x0 += input.removed.start_index;
+            result.0.y0 += input.added.start_index;
+            Some(result)
+        }
+        None => None,
+    }
 }
 
 fn to_isize(input: usize) -> isize {
