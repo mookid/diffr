@@ -615,11 +615,19 @@ fn diff_sequences_bidirectional_snake(input: &DiffInput, v: &mut Vec<isize>) -> 
 }
 
 fn to_isize(input: usize) -> isize {
-    isize::try_from(input).unwrap()
+    if cfg!(debug_assertions) {
+        isize::try_from(input).unwrap()
+    } else {
+        input as _
+    }
 }
 
 fn to_usize(input: isize) -> usize {
-    usize::try_from(input).unwrap()
+    if cfg!(debug_assertions) {
+        usize::try_from(input).unwrap()
+    } else {
+        input as _
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
