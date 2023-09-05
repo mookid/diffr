@@ -95,8 +95,8 @@ fn diff_sequences_test_aux(
     let m = TokenMap::new(&mut [(toks_a.iter(), &seq_a), (toks_b.iter(), &seq_b)]);
     let tok_a = Tokenization::new(seq_a, &toks_a, &m);
     let tok_b = Tokenization::new(seq_b, &toks_b, &m);
-    let input = DiffInput::new(&tok_b, &tok_a);
-    let input_r = DiffInput::new(&tok_a, &tok_b);
+    let input = DiffInput::new(&tok_b, &tok_a, 123);
+    let input_r = DiffInput::new(&tok_a, &tok_b, 123);
 
     let mut v = vec![];
     let result = diff_sequences_simple_forward(&input, &mut v);
@@ -383,7 +383,7 @@ fn find_splitting_point_test() {
         let m = TokenMap::new(&mut [(toks_a.iter(), &seq_a), (toks_b.iter(), &seq_b)]);
         let tok_a = Tokenization::new(seq_a, &toks_a, &m);
         let tok_b = Tokenization::new(seq_b, &toks_b, &m);
-        let input = DiffInput::new(&tok_b, &tok_a);
+        let input = DiffInput::new(&tok_b, &tok_a, 123);
 
         assert_eq!(expected, find_splitting_point(&input).sp);
         for i in 0..expected {
@@ -470,7 +470,7 @@ fn test_lcs_random() {
         let m = TokenMap::new(&mut [(toks_a.iter(), &seq_a), (toks_b.iter(), &seq_b)]);
         let tok_a = Tokenization::new(seq_a, &toks_a, &m);
         let tok_b = Tokenization::new(seq_b, &toks_b, &m);
-        let input = DiffInput::new(&tok_a, &tok_b);
+        let input = DiffInput::new(&tok_a, &tok_b, 123);
         let mut v = vec![];
         let mut dst = vec![];
         diff(&input, &mut v, &mut dst);

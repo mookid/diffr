@@ -26,6 +26,7 @@ pub struct AppConfig {
     refine_added_face: ColorSpec,
     removed_face: ColorSpec,
     refine_removed_face: ColorSpec,
+    large_diff_threshold: usize,
 }
 
 impl Default for AppConfig {
@@ -41,6 +42,7 @@ impl Default for AppConfig {
             refine_added_face: color_spec(Some(bright_white), Some(Green), true),
             removed_face: color_spec(Some(Red), None, false),
             refine_removed_face: color_spec(Some(bright_white), Some(Red), true),
+            large_diff_threshold: 1000,
         }
     }
 }
@@ -416,7 +418,7 @@ impl HunkBuffer {
         let m = TokenMap::new(&mut [(removed_tokens.iter(), data), (added_tokens.iter(), data)]);
         let removed = Tokenization::new(data, removed_tokens, &m);
         let added = Tokenization::new(data, added_tokens, &m);
-        let tokens = DiffInput::new(&added, &removed);
+        let tokens = DiffInput::new(&added, &removed, config.large_diff_threshold);
         let start = now(stats.do_timings());
         diffr_lib::diff(&tokens, v, diff_buffer);
         // TODO output the lcs directly out of `diff` instead

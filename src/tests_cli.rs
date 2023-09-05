@@ -203,6 +203,37 @@ fn color_ok_multiple() {
 }
 
 #[test]
+fn threshold() {
+    // ok
+    test_cli(ProcessTest {
+        args: &["--large-diff-threshold", "123"],
+        out: Empty,
+        err: Empty,
+        is_success: true,
+    });
+
+    // fail
+    test_cli(ProcessTest {
+        args: &["--large-diff-threshold"],
+        out: Empty,
+        err: Exactly("option requires an argument: '--large-diff-threshold'"),
+        is_success: false,
+    });
+    test_cli(ProcessTest {
+        args: &["--large-diff-threshold", "a"],
+        out: Empty,
+        err: Exactly("invalid threshold value: invalid digit found in string"),
+        is_success: false,
+    });
+    test_cli(ProcessTest {
+        args: &["--large-diff-threshold", "-1"],
+        out: Empty,
+        err: Exactly("invalid threshold value: invalid digit found in string"),
+        is_success: false,
+    });
+}
+
+#[test]
 fn line_numbers_style() {
     // TODO  check config?
 

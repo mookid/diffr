@@ -16,6 +16,7 @@ use termcolor::ParseColorError;
 const FLAG_DEBUG: &str = "--debug";
 const FLAG_COLOR: &str = "--colors";
 const FLAG_LINE_NUMBERS: &str = "--line-numbers";
+const FLAG_TOO_LARGE: &str = "--large-diff-threshold";
 
 const BIN_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -187,6 +188,7 @@ enum ArgParsingError {
     Color(ParseColorError),
     MissingValue(FaceName),
     LineNumberStyle(String),
+    LargeDiffThreshold(String),
 }
 
 impl Display for ArgParsingError {
@@ -202,6 +204,9 @@ impl Display for ArgParsingError {
             ),
             ArgParsingError::LineNumberStyle(err) => {
                 write!(f, "unexpected line number style: {}", err)
+            }
+            ArgParsingError::LargeDiffThreshold(err) => {
+                write!(f, "invalid threshold value: {}", err)
             }
         }
     }
@@ -286,6 +291,16 @@ fn parse_color_arg(value: &str, config: &mut AppConfig) -> Result<(), ArgParsing
     Ok(())
 }
 
+fn parse_large_diff_threshold(value: &str, config: &mut AppConfig) -> Result<(), ArgParsingError> {
+    match value.parse() {
+        Ok(val) => {
+            config.large_diff_threshold = val;
+            Ok(())
+        }
+        Err(err) => Err(ArgParsingError::LargeDiffThreshold(err.to_string())),
+    }
+}
+
 fn die_error<TRes>(result: Result<TRes, ArgParsingError>) -> bool {
     if let Err(err) = result {
         eprintln!("{}", err);
@@ -311,6 +326,15 @@ fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item =
         parse_line_number_style(config, None)
     };
     die_error(spec)
+}
+
+fn large_diff(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
+    let arg = args.next().unwrap();
+    if let Some(spec) = args.next() {
+        die_error(parse_large_diff_threshold(&spec, config))
+    } else {
+        missing_arg(arg)
+    }
 }
 
 fn debug(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
@@ -339,6 +363,7 @@ fn parse_options(
             FLAG_LINE_NUMBERS => line_numbers(config, args),
 
             // hidden flags
+            FLAG_TOO_LARGE => large_diff(config, args),
             FLAG_DEBUG => debug(config, args),
 
             arg => bad_arg(arg),
