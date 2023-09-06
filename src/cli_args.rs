@@ -21,7 +21,6 @@ const FLAG_LINE_NUMBERS: &str = "--line-numbers";
 const BIN_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const USAGE: &str = include_str!("../assets/usage.txt");
 const HELP_SHORT: &str = include_str!("../assets/h.txt");
 const HELP_LONG: &str = include_str!("../assets/help.txt");
 
@@ -48,7 +47,7 @@ fn interpolate(s: &str) -> String {
 }
 
 fn usage(code: i32) -> ! {
-    let txt = interpolate(USAGE);
+    let txt = interpolate(HELP_SHORT);
     let _ = std::io::stderr().write(txt.as_bytes());
     process::exit(code);
 }
@@ -357,8 +356,13 @@ fn parse_options(
 }
 
 pub fn parse_config() -> AppConfig {
+    let args = || std::env::args().skip(1);
+    if args().any(|s| s == "--help") {
+        help(true);
+    }
+
     let mut config = AppConfig::default();
-    let mut args = std::env::args().skip(1).peekable();
+    let mut args = args().peekable();
     while parse_options(&mut config, &mut args) {}
 
     if atty::is(atty::Stream::Stdin) {

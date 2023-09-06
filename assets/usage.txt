@@ -1,6 +1,0 @@
-USAGE:
-    diffr reads from standard input and writes to standard output.
-
-    Typical usage is for interactive use of diff:
-    diff -u <file1> <file2> | diffr
-    git show | diffr
