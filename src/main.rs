@@ -183,7 +183,7 @@ where
 
 fn main() {
     let config = cli_args::parse_config();
-    let mut hunk_buffer = HunkBuffer::new(&config);
+    let mut hunk_buffer = HunkBuffer::new(config);
     match hunk_buffer.run() {
         Ok(()) => (),
         Err(ref err) if err.kind() == io::ErrorKind::BrokenPipe => (),
@@ -301,14 +301,14 @@ impl ExecStats {
     }
 }
 
-struct HunkBuffer<'a> {
+struct HunkBuffer {
     v: Vec<isize>,
     diff_buffer: Vec<Snake>,
     added_tokens: Vec<(usize, usize)>,
     removed_tokens: Vec<(usize, usize)>,
     line_number_info: Option<HunkHeader>,
     lines: LineSplit,
-    config: &'a AppConfig,
+    config: AppConfig,
     margin: Vec<u8>,
     warning_lines: Vec<usize>,
     stats: ExecStats,
@@ -414,8 +414,8 @@ fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<(u
 
 const MAX_MARGIN: usize = 41;
 
-impl<'a> HunkBuffer<'a> {
-    fn new(config: &'a AppConfig) -> Self {
+impl HunkBuffer {
+    fn new(config: AppConfig) -> Self {
         let debug = config.debug;
         HunkBuffer {
             v: vec![],
