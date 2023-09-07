@@ -14,7 +14,6 @@ use termcolor::ColorSpec;
 use termcolor::ParseColorError;
 
 const FLAG_DEBUG: &str = "--debug";
-const FLAG_HTML: &str = "--html";
 const FLAG_COLOR: &str = "--colors";
 const FLAG_LINE_NUMBERS: &str = "--line-numbers";
 
@@ -313,12 +312,6 @@ fn line_numbers(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item =
     die_error(spec)
 }
 
-fn html(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
-    config.html = true;
-    args.next();
-    true
-}
-
 fn debug(config: &mut AppConfig, args: &mut Peekable<impl Iterator<Item = String>>) -> bool {
     config.debug = true;
     args.next();
@@ -346,7 +339,6 @@ fn parse_options(
 
             // hidden flags
             FLAG_DEBUG => debug(config, args),
-            FLAG_HTML => html(config, args),
 
             arg => bad_arg(arg),
         }
