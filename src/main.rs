@@ -279,7 +279,7 @@ impl<'a> Margin<'a> {
     }
 }
 
-fn shared_spans(added_tokens: &Tokenization, diff_buffer: &Vec<Snake>) -> Vec<(usize, usize)> {
+fn shared_spans(added_tokens: &Tokenization, diff_buffer: &[Snake]) -> Vec<(usize, usize)> {
     let mut shared_spans = vec![];
     for snake in diff_buffer.iter() {
         for i in 0..snake.len {
@@ -348,7 +348,7 @@ impl HunkBuffer {
         };
         // special case: all whitespaces
         if y == data_hi {
-            output(data, data_lo, data_lo + 1, &no_highlight, out)?;
+            output(data, data_lo, data_lo + 1, no_highlight, out)?;
             output(data, data_lo + 1, data_hi, &trailing_ws, out)?;
             return Ok(());
         }
@@ -420,7 +420,7 @@ impl HunkBuffer {
         let start = now(stats.do_timings());
         diffr_lib::diff(&tokens, v, diff_buffer);
         // TODO output the lcs directly out of `diff` instead
-        let shared_spans = shared_spans(&added, &diff_buffer);
+        let shared_spans = shared_spans(&added, diff_buffer);
         let lcs = Tokenization::new(data, &shared_spans, &m);
         stats.time_lcs_ms += duration_ms_since(&start);
         let start = now(stats.do_timings());
@@ -473,7 +473,7 @@ impl HunkBuffer {
                 }
             }
         }
-        assert!(warnings.peek() == None);
+        assert!(warnings.peek().is_none());
         drop(shared_removed);
         drop(shared_added);
         lines.clear();
@@ -503,7 +503,7 @@ impl HunkBuffer {
             .take_while(|ch| ch.is_ascii_whitespace())
             .count();
         diffr_lib::tokenize(
-            &self.lines.data(),
+            self.lines.data(),
             ofs,
             if added {
                 &mut self.added_tokens
@@ -600,7 +600,7 @@ where
         buf
     };
     out.set_color(colorspec)?;
-    out.write_all(&buf)?;
+    out.write_all(buf)?;
     out.reset()?;
     if ends_with_newline {
         out.write_all(b"\n")?;
@@ -621,7 +621,7 @@ fn skip_all_escape_code(buf: &[u8]) -> usize {
     }
     let mut buf = buf;
     let mut sum = 0;
-    while let Some(nbytes) = skip_escape_code(&buf) {
+    while let Some(nbytes) = skip_escape_code(buf) {
         buf = &buf[nbytes..];
         sum += nbytes
     }
@@ -631,7 +631,7 @@ fn skip_all_escape_code(buf: &[u8]) -> usize {
 /// Returns the first byte of the slice, after skipping the escape
 /// code bytes.
 fn first_after_escape(buf: &[u8]) -> Option<u8> {
-    let nbytes = skip_all_escape_code(&buf);
+    let nbytes = skip_all_escape_code(buf);
     buf.iter().skip(nbytes).cloned().next()
 }
 
@@ -857,7 +857,7 @@ impl<'a> LineNumberParser<'a> {
 }
 
 fn parse_line_number(buf: &[u8]) -> Option<HunkHeader> {
-    LineNumberParser::new(&buf).parse_line_number()
+    LineNumberParser::new(buf).parse_line_number()
 }
 
 #[cfg(test)]

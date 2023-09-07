@@ -86,7 +86,7 @@ fn snake_len(seq: &Tokenization, lcs: &Tokenization, start_lcs: usize, start_seq
 /// Minimize the number of elements when partitioning `seq` according to `lcs`.
 /// `lcs` is a subsequence of `seq`.
 pub fn optimize_partition(seq: &Tokenization, lcs: &Tokenization) -> NormalizationResult {
-    let context = Context::new(&seq, &lcs);
+    let context = Context::new(seq, lcs);
     let root = Coord {
         next_lcs: 0,
         next_seq: 0,
@@ -99,7 +99,7 @@ pub fn optimize_partition(seq: &Tokenization, lcs: &Tokenization) -> Normalizati
     let mut new_frontier = vec![];
     let mut prev = HashMap::new();
     let mut found_seq = None;
-    while !frontier.is_empty() && found_seq == None {
+    while !frontier.is_empty() && found_seq.is_none() {
         new_frontier.clear();
         for &coord in frontier.iter() {
             if coord.next_lcs == target.next_lcs {
@@ -120,14 +120,14 @@ pub fn optimize_partition(seq: &Tokenization, lcs: &Tokenization) -> Normalizati
                 if start_seq + lcs_len > seq.nb_tokens() {
                     break;
                 }
-                let snake_len = 1 + snake_len(&seq, &lcs, start_lcs + 1, start_seq + 1);
+                let snake_len = 1 + snake_len(seq, lcs, start_lcs + 1, start_seq + 1);
                 let next_coord = Coord {
                     next_lcs: start_lcs + snake_len,
                     next_seq: start_seq + snake_len,
                 };
                 if last_enqueued_snake_len < snake_len || next_coord == target {
                     if next_coord.next_lcs == target.next_lcs
-                        && (next_coord.next_seq == target.next_seq || found_seq == None)
+                        && (next_coord.next_seq == target.next_seq || found_seq.is_none())
                     {
                         found_seq = Some(next_coord.next_seq);
                     }

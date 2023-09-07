@@ -72,7 +72,7 @@ fn test_cli(descr: ProcessTest) {
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::piped());
     for arg in descr.args {
-        cmd.arg(&*arg);
+        cmd.arg(*arg);
     }
     let child = cmd.spawn().expect("spawn");
     let output = child.wait_with_output().expect("wait_with_output");

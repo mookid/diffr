@@ -42,7 +42,7 @@ impl<'a> TokenMap<'a> {
     }
 
     fn get(&self, slice: &'a [u8]) -> TokenId {
-        self.0.get(slice).unwrap().clone()
+        *self.0.get(slice).unwrap()
     }
 }
 
@@ -240,7 +240,7 @@ impl<'a> DiffTraversal<'a> {
             input.removed.one_past_end_index,
             input.added.one_past_end_index,
         );
-        assert!(max * 2 + 1 <= v.len());
+        assert!(max * 2 < v.len());
         let (start, end) = if forward { (start, end) } else { (end, start) };
         let mut res = DiffTraversal { v, max, _end: end };
         if max != 0 {
@@ -336,15 +336,15 @@ pub struct LineSplit {
 }
 
 impl LineSplit {
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (usize, usize)> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         LineSplitIter {
-            line_split: &self,
+            line_split: self,
             index: 0,
             start_of_slice: 0,
         }
     }
 
-    pub fn data<'a>(&'a self) -> &'a [u8] {
+    pub fn data(&self) -> &[u8] {
         &self.data
     }
 
@@ -451,7 +451,7 @@ fn diff_sequences_kernel_bidirectional(
             x += 1;
             y += 1;
         }
-        if odd && (k - delta).abs() <= d - 1 && x > ctx_bwd.v(k - delta) {
+        if odd && (k - delta).abs() < d && x > ctx_bwd.v(k - delta) {
             return Some((Snake::default().from(x0, y0).len(x - x0), 2 * d - 1));
         }
         *ctx_fwd.v_mut(k) = x;
@@ -568,14 +568,14 @@ struct SplittingPoint {
 
 // Find the splitting point when two sequences differ by one element.
 fn find_splitting_point(input: &DiffInput) -> SplittingPoint {
+    use std::cmp::Ordering::*;
+
     let n = to_isize(input.n());
     let m = to_isize(input.m());
-    let (short, long, nb_tokens, dx, dy) = if n < m {
-        (&input.removed, &input.added, n, 0, 1)
-    } else if m < n {
-        (&input.added, &input.removed, m, 1, 0)
-    } else {
-        (&input.added, &input.removed, m, 0, 0)
+    let (short, long, nb_tokens, dx, dy) = match n.cmp(&m) {
+        Less => (&input.removed, &input.added, n, 0, 1),
+        Greater => (&input.added, &input.removed, m, 1, 0),
+        Equal => (&input.added, &input.removed, m, 0, 0),
     };
     let mut sp = nb_tokens;
     for i in 0..nb_tokens {
@@ -646,6 +646,7 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<Span>) {
     };
     let mut lo = ofs;
     let mut kind = TokenKind::Other;
+    #[allow(clippy::needless_range_loop)]
     for hi in ofs..src.len() {
         let oldkind = kind;
         kind = classify_byte(src[hi]);

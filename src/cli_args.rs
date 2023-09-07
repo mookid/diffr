@@ -83,7 +83,7 @@ impl Display for FaceName {
 }
 
 impl FaceName {
-    fn get_face_mut<'a, 'b>(&'a self, config: &'b mut super::AppConfig) -> &'b mut ColorSpec {
+    fn get_face_mut<'b>(&self, config: &'b mut super::AppConfig) -> &'b mut ColorSpec {
         use FaceName::*;
         match self {
             Added => &mut config.added_face,
@@ -230,9 +230,9 @@ impl FromStr for LineNumberStyleOpt {
 
 fn ignore<T>(_: T) {}
 
-fn parse_line_number_style<'a>(
+fn parse_line_number_style(
     config: &mut AppConfig,
-    value: Option<&'a str>,
+    value: Option<&str>,
 ) -> Result<(), ArgParsingError> {
     let style = if let Some(style) = value {
         style.parse::<LineNumberStyleOpt>()?.0
@@ -279,10 +279,11 @@ where
 
 fn parse_color_arg(value: &str, config: &mut AppConfig) -> Result<(), ArgParsingError> {
     let mut pieces = value.split(':');
-    Ok(if let Some(piece) = pieces.next() {
+    if let Some(piece) = pieces.next() {
         let face_name = piece.parse::<FaceName>()?;
         parse_color_attributes(config, pieces, face_name)?;
-    })
+    };
+    Ok(())
 }
 
 fn die_error<TRes>(result: Result<TRes, ArgParsingError>) -> bool {
