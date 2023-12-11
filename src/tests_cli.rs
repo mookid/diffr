@@ -261,7 +261,7 @@ fn line_numbers_style() {
     test_cli(ProcessTest {
         args: &["--line-numbers", "foo"],
         out: Empty,
-        err: Exactly("unexpected line number style: got 'foo', expected aligned|compact"),
+        err: Exactly("unexpected line number style: got 'foo', expected aligned|compact|fixed"),
         is_success: false,
     });
 }

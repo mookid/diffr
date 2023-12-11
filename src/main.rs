@@ -16,6 +16,16 @@ mod diffr_lib;
 pub enum LineNumberStyle {
     Compact,
     Aligned,
+    Fixed(usize),
+}
+
+impl LineNumberStyle {
+    fn min_width(&self) -> usize {
+        match *self {
+            LineNumberStyle::Compact | LineNumberStyle::Aligned => 0,
+            LineNumberStyle::Fixed(w) => w,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -204,8 +214,8 @@ struct Margin<'a> {
 const MARGIN_TAB_STOP: usize = 8;
 
 impl<'a> Margin<'a> {
-    fn new(header: &'a HunkHeader, margin: &'a mut [u8]) -> Self {
-        let full_margin = header.width();
+    fn new(header: &'a HunkHeader, margin: &'a mut [u8], config: &'a AppConfig) -> Self {
+        let full_margin = header.width(config.line_numbers_style);
         let half_margin = full_margin / 2;
 
         // If line number is 0, the column is empty and
@@ -411,7 +421,7 @@ impl HunkBuffer {
             stats,
         } = self;
         let mut margin = match line_number_info {
-            Some(lni) => Margin::new(lni, margin),
+            Some(lni) => Margin::new(lni, margin, config),
             None => Default::default(),
         };
         let data = lines.data();
@@ -700,11 +710,12 @@ const WIDTH: [u64; 20] = [
     9999999999999999999,
 ];
 
-fn width1(x: u64) -> usize {
+fn width1(x: u64, st: Option<LineNumberStyle>) -> usize {
     let result = WIDTH.binary_search(&x);
-    match result {
+    let result = match result {
         Ok(i) | Err(i) => i,
-    }
+    };
+    st.map(|style| style.min_width()).unwrap_or(0).max(result)
 }
 
 impl HunkHeader {
@@ -715,10 +726,10 @@ impl HunkHeader {
         }
     }
 
-    fn width(&self) -> usize {
-        2 * width1((self.minus_range.0 + self.minus_range.1) as u64)
-            .max(width1((self.plus_range.0 + self.plus_range.1) as u64))
-            + 1
+    fn width(&self, st: Option<LineNumberStyle>) -> usize {
+        let w1 = width1((self.minus_range.0 + self.minus_range.1) as u64, st);
+        let w2 = width1((self.plus_range.0 + self.plus_range.1) as u64, st);
+        2 * w1.max(w2) + 1
     }
 }
 
