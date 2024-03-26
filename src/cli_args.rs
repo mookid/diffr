@@ -143,6 +143,7 @@ impl EnumString for LineNumberStyleOpt {
         &[
             ("aligned", LineNumberStyleOpt(Aligned)),
             ("compact", LineNumberStyleOpt(Compact)),
+            ("fixed", LineNumberStyleOpt(Fixed(3))),
         ]
     }
 }

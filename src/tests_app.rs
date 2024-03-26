@@ -70,9 +70,15 @@ fn test_width() {
             assert_eq!(format!("{}", x + 1).len(), i + 1);
         }
     }
-    assert_eq!(0, width1(0));
+    assert_eq!(0, width1(0, None));
     fn test(x: u64) {
-        assert_eq!(format!("{}", x).len(), width1(x));
+        assert_eq!(format!("{}", x).len(), width1(x, None));
+        for i in 0..5 {
+            assert_eq!(
+                format!("{}", x).len().max(i),
+                width1(x, Some(LineNumberStyle::Fixed(i)))
+            );
+        }
     }
     for i in 1..=10000 {
         test(i);
@@ -85,11 +91,35 @@ fn test_width() {
     }
     test(u64::max_value());
 
-    assert_eq!("123:456".len(), HunkHeader::new((123, 5), (456, 9)).width());
+    assert_eq!(
+        "123:456".len(),
+        HunkHeader::new((123, 5), (456, 9)).width(None)
+    );
     assert_eq!(
         "1122: 456".len(),
-        HunkHeader::new((123, 999), (456, 9)).width()
+        HunkHeader::new((123, 999), (456, 9)).width(None)
     );
-    assert_eq!("   :456".len(), HunkHeader::new((0, 0), (456, 9)).width());
-    assert_eq!(MAX_MARGIN, 2 * width1(u64::max_value()) + 1);
+    assert_eq!(
+        "   :456".len(),
+        HunkHeader::new((0, 0), (456, 9)).width(None)
+    );
+    assert_eq!(MAX_MARGIN, 2 * width1(u64::max_value(), None) + 1);
+
+    // with fixed width
+    assert_eq!(
+        " 123: 456".len(),
+        HunkHeader::new((123, 5), (456, 9)).width(Some(LineNumberStyle::Fixed(4)))
+    );
+    assert_eq!(
+        "1122: 456".len(),
+        HunkHeader::new((123, 999), (456, 9)).width(Some(LineNumberStyle::Fixed(4)))
+    );
+    assert_eq!(
+        "    : 456".len(),
+        HunkHeader::new((0, 0), (456, 9)).width(Some(LineNumberStyle::Fixed(4)))
+    );
+    assert_eq!(
+        MAX_MARGIN,
+        2 * width1(u64::max_value(), Some(LineNumberStyle::Fixed(4))) + 1
+    );
 }
