@@ -369,10 +369,12 @@ fn tokenize_test() {
     test(&["abcd", " ", "defg"], b"abcd defg");
     test(&["abcd", "    ", "defg"], b"abcd    defg");
     test(&["abcd", "\t    ", "defg"], b"abcd\t    defg");
+    test(&["ab_cd", " ", "de", "-", "fg"], b"ab_cd de-fg");
     test(
         &["*", "(", "abcd", ")", " ", "#", "[", "efgh", "]"],
         b"*(abcd) #[efgh]",
     );
+    test(&["кирилица", " ", "🧑🏼‍🌾"], "кирилица 🧑🏼‍🌾".as_bytes()); // (cyrilic and a farmer emoji)
 }
 
 #[test]
