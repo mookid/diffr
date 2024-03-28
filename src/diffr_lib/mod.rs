@@ -7,6 +7,7 @@
 //! The main entrypoint is `diff`, which allows to compute the longest
 //! common subsequence between two sequences of byte slices.
 
+use bstr::ByteSlice;
 use std::collections::hash_map::Entry::*;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -648,7 +649,6 @@ fn to_usize(input: isize) -> usize {
         input as _
     }
 }
-
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 enum TokenKind {
     Other,
@@ -663,12 +663,13 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<Span>) {
             tokens.push((lo, hi))
         }
     };
-    let mut lo = ofs;
     let mut kind = TokenKind::Other;
+    let mut lo = ofs;
     #[allow(clippy::needless_range_loop)]
-    for hi in ofs..src.len() {
+    for (grapheme_start, _, g) in src[ofs..].grapheme_indices() {
+        let hi = grapheme_start + ofs;
         let oldkind = kind;
-        kind = classify_byte(src[hi]);
+        kind = classify_grapheme(g);
         if kind != oldkind || oldkind == TokenKind::Other {
             push(lo, hi);
             lo = hi
@@ -677,11 +678,14 @@ pub fn tokenize(src: &[u8], ofs: usize, tokens: &mut Vec<Span>) {
     push(lo, src.len());
 }
 
-fn classify_byte(b: u8) -> TokenKind {
-    match b {
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' => TokenKind::Word,
-        b'\t' | b' ' => TokenKind::Spaces,
-        _ => TokenKind::Other,
+fn classify_grapheme(g: &str) -> TokenKind {
+    let first_char = g.chars().next().unwrap_or_default();
+    if first_char.is_alphanumeric() || first_char == '_' {
+        TokenKind::Word
+    } else if first_char == ' ' || first_char == '\t' {
+        TokenKind::Spaces
+    } else {
+        TokenKind::Other
     }
 }
 
