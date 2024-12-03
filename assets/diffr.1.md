@@ -13,7 +13,7 @@ diffr - adds word-level diff on top of unified diffs
 
 diff -u <file1> <file2> | **diffr** [OPTIONS]
 
-git show | **diff** [OPTIONS]
+git show | **diffr** [OPTIONS]
 
 # DESCRIPTION
 **\-\-colors** *\<color_spec\>*
