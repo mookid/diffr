@@ -161,6 +161,7 @@ enum AttributeName {
     Bold(bool),
     Intense(bool),
     Underline(bool),
+    Dimmed(bool),
     Reset,
 }
 
@@ -174,6 +175,8 @@ impl EnumString for AttributeName {
             ("noitalic", Italic(false)),
             ("bold", Bold(true)),
             ("nobold", Bold(false)),
+            ("dimmed", Dimmed(true)),
+            ("nodimmed", Dimmed(false)),
             ("intense", Intense(true)),
             ("nointense", Intense(false)),
             ("underline", Underline(true)),
@@ -278,6 +281,7 @@ where
             Bold(bold) => ignore(face.set_bold(bold)),
             Intense(intense) => ignore(face.set_intense(intense)),
             Underline(underline) => ignore(face.set_underline(underline)),
+            Dimmed(dimmed) => ignore(face.set_dimmed(dimmed)),
             Reset => *face = Default::default(),
         }
     }

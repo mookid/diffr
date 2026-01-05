@@ -18,4 +18,4 @@ debug = true
 
 [dependencies]
 bstr = { version = "1.9.1", default-features = false, features = ["unicode"] }
-termcolor = "1.1"
+termcolor = "1.4"
