@@ -687,33 +687,16 @@ struct HunkHeader {
     plus_range: (usize, usize),
 }
 
-const WIDTH: [u64; 20] = [
-    0,
-    9,
-    99,
-    999,
-    9999,
-    99999,
-    999999,
-    9999999,
-    99999999,
-    999999999,
-    9999999999,
-    99999999999,
-    999999999999,
-    9999999999999,
-    99999999999999,
-    999999999999999,
-    9999999999999999,
-    99999999999999999,
-    999999999999999999,
-    9999999999999999999,
-];
-
 fn width1(x: u64, st: Option<LineNumberStyle>) -> usize {
-    let result = WIDTH.binary_search(&x);
-    let result = match result {
-        Ok(i) | Err(i) => i,
+    let result = if x == 0 {
+        0
+    } else {
+        let mut counter = 1;
+        let mut x = x;
+        while x >= 10 {
+            (x, counter) = (x / 10, counter + 1);
+        }
+        counter
     };
     st.map(|style| style.min_width()).unwrap_or(0).max(result)
 }

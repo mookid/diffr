@@ -65,11 +65,6 @@ fn parse_line_number_test() {
 
 #[test]
 fn test_width() {
-    for (i, x) in WIDTH.iter().enumerate() {
-        if x < &u64::max_value() {
-            assert_eq!(format!("{}", x + 1).len(), i + 1);
-        }
-    }
     assert_eq!(0, width1(0, None));
     fn test(x: u64) {
         assert_eq!(format!("{}", x).len(), width1(x, None));
